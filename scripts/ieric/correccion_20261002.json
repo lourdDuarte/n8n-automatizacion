@@ -1,0 +1,197 @@
+{
+ "descripcion": "Corrección única IERIC verificada contra los Informes de Coyuntura oficiales (Formosa = F, Total país = N). Revisado el 2/10/2026.",
+ "valores": [
+  {
+   "periodo": "2020-11",
+   "titulo": "Var. IA salario real sector construcción (C/E)F",
+   "valor": 5.0,
+   "informe": "202101 (Cuadro VIII)",
+   "valor_anterior_sheet": 0
+  },
+  {
+   "periodo": "2020-11",
+   "titulo": "Var. IA salario real sector construcción (C/E) N",
+   "valor": -3.1,
+   "informe": "202101 (Cuadro VIII)",
+   "valor_anterior_sheet": 0
+  },
+  {
+   "periodo": "2020-11",
+   "titulo": "Var. IA salario nominal del sector construccion (C/E) F",
+   "valor": 47.1,
+   "informe": "202101 (Cuadro VI)",
+   "valor_anterior_sheet": 0
+  },
+  {
+   "periodo": "2020-11",
+   "titulo": "Var. IA salario nominal del sector construccion (C/E) N",
+   "valor": 31.6,
+   "informe": "202101 (Cuadro VI)",
+   "valor_anterior_sheet": 0
+  },
+  {
+   "periodo": "2020-12",
+   "titulo": "Var. IA salario real sector construcción (C/E)F",
+   "valor": 5.4,
+   "informe": "202102 (Cuadro VIII)",
+   "valor_anterior_sheet": 0
+  },
+  {
+   "periodo": "2020-12",
+   "titulo": "Var. IA salario real sector construcción (C/E) N",
+   "valor": -6.1,
+   "informe": "202102 (Cuadro VIII)",
+   "valor_anterior_sheet": 0
+  },
+  {
+   "periodo": "2020-12",
+   "titulo": "Var. IA salario nominal del sector construccion (C/E) F",
+   "valor": 49.9,
+   "informe": "202102 (Cuadro VI)",
+   "valor_anterior_sheet": 0
+  },
+  {
+   "periodo": "2020-12",
+   "titulo": "Var. IA salario nominal del sector construccion (C/E) N",
+   "valor": 27.9,
+   "informe": "202102 (Cuadro VI)",
+   "valor_anterior_sheet": 0
+  },
+  {
+   "periodo": "2021-02",
+   "titulo": "Var. IA salario real sector construcción (C/E) N",
+   "valor": -16.2,
+   "informe": "202104 (Cuadro VIII)",
+   "valor_anterior_sheet": -6.0
+  },
+  {
+   "periodo": "2021-04",
+   "titulo": "Puestos de trabajo registrados en el sector construccion N",
+   "valor": 324759,
+   "informe": "202106 (Cuadro VI)",
+   "valor_anterior_sheet": 324769
+  },
+  {
+   "periodo": "2021-05",
+   "titulo": "Puestos de trabajo registrados en el sector construccion N",
+   "valor": 325131,
+   "informe": "202107 (Cuadro VI)",
+   "valor_anterior_sheet": 326131
+  },
+  {
+   "periodo": "2023-03",
+   "titulo": "Puestos de trabajo registrados en el sector construccion N",
+   "valor": 442336,
+   "informe": "202305 (Cuadro VI)",
+   "valor_anterior_sheet": 422336
+  },
+  {
+   "periodo": "2023-04",
+   "titulo": "Puestos de trabajo registrados en el sector construccion N",
+   "valor": 442356,
+   "informe": "202306 (Cuadro VI)",
+   "valor_anterior_sheet": 422356
+  },
+  {
+   "periodo": "2024-08",
+   "titulo": "Puestos de trabajo registrados en el sector construccion N",
+   "valor": 348822,
+   "informe": "202410 (Cuadro VI)",
+   "valor_anterior_sheet": 348882
+  },
+  {
+   "periodo": "2024-12",
+   "titulo": "Var. IA salario real sector construcción (C/E)F",
+   "valor": 8.5,
+   "informe": "202502 (Cuadro VIII)",
+   "valor_anterior_sheet": 85.0
+  },
+  {
+   "periodo": "2025-01",
+   "titulo": "Var. IA salario real sector construcción (C/E) N",
+   "valor": 12.6,
+   "informe": "N° 233 (Cuadro VIII)",
+   "valor_anterior_sheet": 12.2
+  },
+  {
+   "periodo": "2025-02",
+   "titulo": "Var. IA salario real sector construcción (C/E) N",
+   "valor": 25.3,
+   "informe": "N° 234 (Cuadro VIII)",
+   "valor_anterior_sheet": 24.9
+  },
+  {
+   "periodo": "2025-10",
+   "titulo": "Var. IA salario real sector construcción (C/E)F",
+   "valor": 16.8,
+   "informe": "N° 242 (Cuadro VIII)",
+   "valor_anterior_sheet": 10.5
+  },
+  {
+   "periodo": "2025-10",
+   "titulo": "Var. IA salario real sector construcción (C/E) N",
+   "valor": 1.4,
+   "informe": "N° 242 (Cuadro VIII)",
+   "valor_anterior_sheet": 0.08
+  },
+  {
+   "periodo": "2025-11",
+   "titulo": "Var. IA salario real sector construcción (C/E)F",
+   "valor": 10.2,
+   "informe": "N° 243 (Cuadro VIII)",
+   "valor_anterior_sheet": 4.4
+  },
+  {
+   "periodo": "2025-11",
+   "titulo": "Var. IA salario real sector construcción (C/E) N",
+   "valor": -4.0,
+   "informe": "N° 243 (Cuadro VIII)",
+   "valor_anterior_sheet": -5.92
+  },
+  {
+   "periodo": "2026-04",
+   "titulo": "Salario promedio del sector Construcción (en pesos- con estacionalidad) N",
+   "valor": 1447712.6,
+   "informe": "N° 248 (Cuadro VI)",
+   "valor_anterior_sheet": 1360132.8
+  },
+  {
+   "periodo": "2026-05",
+   "titulo": "Var. IA salario nominal del sector construccion (C/E) F",
+   "valor": 34.8,
+   "informe": "N° 249 (Cuadro VI)",
+   "valor_anterior_sheet": 35.3
+  },
+  {
+   "periodo": "2026-05",
+   "titulo": "Var. IA salario nominal del sector construccion (C/E) N",
+   "valor": 35.9,
+   "informe": "N° 249 (Cuadro VI)",
+   "valor_anterior_sheet": 33.2
+  },
+  {
+   "periodo": "2026-06",
+   "titulo": "Var. IA salario real sector construcción (C/E)F",
+   "valor": 1.8,
+   "informe": "N° 250 (Cuadro VIII)",
+   "valor_anterior_sheet": 1.6
+  },
+  {
+   "periodo": "2026-07",
+   "titulo": "Var. IA salario real sector construcción (C/E)F",
+   "valor": 1.1,
+   "informe": "N° 251 (Cuadro VIII)",
+   "valor_anterior_sheet": 26.2
+  },
+  {
+   "periodo": "2026-07",
+   "titulo": "Var. IA salario real sector construcción (C/E) N",
+   "valor": 3.4,
+   "informe": "N° 251 (Cuadro VIII)",
+   "valor_anterior_sheet": 3.0
+  }
+ ],
+ "sin_estacionalidad_aguinaldo": [
+  "2026-06"
+ ]
+}

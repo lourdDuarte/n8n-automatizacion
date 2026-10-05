@@ -1,0 +1,163 @@
+const entradas = $input.all();
+const actualizaciones = [];
+
+const limpiarTitulo = (v) => String(v ?? '')
+  .replace(/[\r\n\t]+/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .toLocaleLowerCase('es');
+
+const corregirTitulo = (titulo) => {
+  const equivalencias = {
+    'Recaudación Imp.\nde Sellos F': 'Recaudación Imp.\r\nde Sellos F',
+    'Recaudacion Reg. de Facil.\nde Pago\t': 'Recaudacion Reg. de Facil.\r\nde Pago\t',
+    'Recaudacion Imp. a los\nJuegos de Azar': 'Recaudacion Imp. a los\r\nJuegos de Azar'
+  };
+  return equivalencias[titulo] || titulo;
+};
+
+for (let indice = 0; indice < entradas.length; indice++) {
+  const buffer = await this.helpers.getBinaryDataBuffer(indice, 'data');
+  const texto = buffer.toString('utf8').replace(/^\uFEFF/, '');
+  const resumen = JSON.parse(texto);
+  const cargasBase = (resumen.actualizaciones_google || [])
+    .filter(item => item.hoja === 'BASE DE DATOS');
+  const hayCargaGoogle = cargasBase.length > 0;
+  const huboCambios = resumen.notificacion?.hubo_cambios === true || hayCargaGoogle;
+  const hayErrores = resumen.estado === 'ERROR' || (resumen.errores || []).length > 0;
+
+  if (!huboCambios && !hayErrores) continue;
+
+  const enviados = new Set();
+  for (const item of cargasBase) {
+    for (const titulo of Object.keys(item.valores || {})) {
+      enviados.add(limpiarTitulo(titulo));
+    }
+  }
+
+  const resultados = (resumen.resultados || []).map(r => ({
+    fuente: r.fuente,
+    nombre: r.nombre,
+    estado: r.estado,
+    periodo: r.periodo,
+    error_final: r.error_final || '',
+    salida_final: r.salida_final || '',
+    detalle: r.detalle || '',
+    celdas_actualizadas: Number(r.celdas_actualizadas || 0),
+    cambios: Array.isArray(r.cambios) ? r.cambios : [],
+    detalle_completo: Array.isArray(r.detalle_completo) ? r.detalle_completo : []
+  }));
+
+  const cargas = [];
+  for (const r of resultados.filter(x => x.estado === 'OK')) {
+    const esperados = r.detalle_completo
+      .map(x => x && x.titulo)
+      .filter(Boolean);
+    const cambios = r.cambios
+      .map(x => x && (x.titulo || x.celda))
+      .filter(Boolean);
+    const referencia = esperados.length ? esperados : cambios;
+    const totalesFijos = { ipi: 48, cammesa: 9 };
+    const totalFijo = totalesFijos[String(r.fuente || '').toLowerCase()];
+    const enviadosIndicador = referencia.length
+      ? referencia.filter(t => enviados.has(limpiarTitulo(t)))
+      : [];
+    const cantidad = referencia.length
+      ? enviadosIndicador.length
+      : (totalFijo ? Math.min(totalFijo, enviados.size) : 0);
+    const esperadasCantidad = totalFijo || referencia.length || cantidad;
+    const faltantes = referencia.length
+      ? referencia.filter(t => !enviados.has(limpiarTitulo(t)))
+      : [];
+    const textoDiagnostico = limpiarTitulo(
+      r.error_final || r.detalle || r.salida_final || ''
+    );
+    let motivo = '';
+    if (cantidad < esperadasCantidad) {
+      if (/encabezado|header|columna.*no.*encontr/.test(textoDiagnostico)) {
+        motivo = 'Uno o más encabezados no coinciden con la base de destino.';
+      } else if (/no.*disponible|todavia|aun no|periodo esperado/.test(textoDiagnostico)) {
+        motivo = 'La fuente todavía no publicó todos los datos esperados.';
+      } else if (/no se encontro|valor.*no.*encontr|faltan/.test(textoDiagnostico)) {
+        motivo = 'Uno o más valores no fueron encontrados en la publicación.';
+      } else {
+        motivo = 'Algunas columnas no fueron entregadas o no coincidieron con los encabezados del Observatorio.';
+      }
+    }
+    if (cantidad > 0) {
+      cargas.push({
+        fuente: r.fuente,
+        nombre: r.nombre,
+        periodo: r.periodo,
+        columnas_actualizadas: cantidad,
+        columnas_esperadas: esperadasCantidad,
+        columnas_faltantes: faltantes,
+        motivo,
+        cambios: r.cambios
+      });
+    }
+  }
+
+  // Respaldo para ejecutores que todavía no entregan detalle_completo.
+  if (cargas.length === 0 && hayCargaGoogle) {
+    const ok = resultados.filter(r => r.estado === 'OK');
+    const total = cargasBase.reduce(
+      (n, item) => n + Object.keys(item.valores || {}).filter(
+        titulo => limpiarTitulo(titulo) !== 'periodo' && !titulo.startsWith('__')
+      ).length,
+      0
+    );
+    if (ok.length === 1) {
+      cargas.push({
+        fuente: ok[0].fuente,
+        nombre: ok[0].nombre,
+        periodo: ok[0].periodo || cargasBase[0]?.periodo,
+        columnas_actualizadas: total,
+        columnas_esperadas: total,
+        cambios: ok[0].cambios
+      });
+    } else {
+      cargas.push({
+        fuente: 'varios',
+        nombre: 'Indicadores del Observatorio',
+        periodo: cargasBase[0]?.periodo,
+        columnas_actualizadas: total,
+        columnas_esperadas: total,
+        cambios: []
+      });
+    }
+  }
+
+  const aviso = {
+    estado: resumen.estado,
+    inicio: resumen.inicio,
+    fin: resumen.fin,
+    solicitadas: resumen.solicitadas,
+    ejecutadas: resumen.ejecutadas,
+    errores: resumen.errores || [],
+    omitidas: resumen.omitidas || [],
+    notificacion: resumen.notificacion || {},
+    resultados,
+    cargas
+  };
+
+  for (const item of cargasBase) {
+    const valoresCorregidos = {};
+    for (const [titulo, valor] of Object.entries(item.valores || {})) {
+      valoresCorregidos[corregirTitulo(titulo)] = valor;
+    }
+    actualizaciones.push({
+      json: { PERIODO: item.periodo, ...valoresCorregidos }
+    });
+  }
+
+  if (actualizaciones.length === 0) {
+    actualizaciones.push({ json: { __solo_aviso: true } });
+  }
+
+  const ultimo = actualizaciones[actualizaciones.length - 1].json;
+  ultimo.__enviar_aviso = true;
+  ultimo.__aviso = aviso;
+}
+
+return actualizaciones;

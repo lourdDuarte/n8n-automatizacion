@@ -1,0 +1,15 @@
+﻿ORGANIZACION FASE 1
+Fecha: 2026-09-16 11:25:47
+Archivos movidos: 21
+Archivos omitidos: 0
+Errores: 0
+
+No se elimino ningun archivo.
+No se sobrescribio ningun destino existente.
+
+Elementos que permanecen fuera deliberadamente:
+C:\Users\daeco\Desktop\iniciar_n8n.bat
+C:\Users\daeco\Desktop\RESPALDO_ESTABLE_AUTOMATIZACION_20260902.zip
+C:\Users\daeco\Downloads\ESCANEAR_AUTOMATIZACION_ACTUAL.ps1
+
+Detalle de movimientos: C:\Users\daeco\Desktop\automatizacion_indicadores\documentacion\organizacion\MOVIMIENTOS_FASE1_20260916_112537.csv

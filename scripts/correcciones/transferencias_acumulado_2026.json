@@ -1,0 +1,19 @@
+{
+ "descripcion": "Acumulado anual Nación de transferencias automáticas (IARAF): en el Sheet es una fórmula que suma el mes anterior + el monto del mes, pero en enero de 2026 no se reinició. Se corrige enero para que el acumulado arranque con el monto de enero; febrero a agosto se recalculan solos. Septiembre (58.092.792) ya coincide con el acumulado publicado por IARAF.",
+ "fuente": "correccion_transferencias",
+ "formulas": [
+  {
+   "periodo": "2026-01",
+   "titulo": "Transferencias automáticas por coparticipación, leyes compl. y compensac. Acumulado anual. En millones de $ N",
+   "formula": "={col:Transferencias automáticas por coparticipación, leyes compl. y compensac. en millones $ N}{fila}",
+   "esperado": 5847670
+  }
+ ],
+ "controles": [
+  {
+   "periodo": "2026-08",
+   "titulo": "Transferencias automáticas por coparticipación, leyes compl. y compensac. Acumulado anual. En millones de $ N",
+   "esperado": 51014873
+  }
+ ]
+}

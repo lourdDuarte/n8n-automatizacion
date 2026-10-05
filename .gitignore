@@ -1,0 +1,28 @@
+# Variables y credenciales
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Archivos generados por la automatización
+logs/
+reportes/
+respaldos/
+salidas_n8n/
+
+# Archivos temporales
+*.tmp
+*.log
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# Respaldos dentro de la base
+base/respaldos/
+base/BASE_antes_*.xlsx

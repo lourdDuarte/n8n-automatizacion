@@ -1,0 +1,18 @@
+﻿AUDITORIA DE AUTOMATIZACION - SOLO LECTURA
+Fecha: 2026-09-16 11:06:26
+Proyecto activo esperado: C:\Users\daeco\Desktop\automatizacion_indicadores
+Proyecto encontrado: True
+Archivos dentro del proyecto: 306
+Archivos relacionados fuera del proyecto: 24
+Grupos de duplicados exactos: 5
+Archivos vacios para revisar: 4
+
+NO se borro, movio ni renombro ningun archivo.
+No elimine nada hasta revisar los informes.
+
+Archivos que debe enviar para la revision:
+- RESUMEN.txt
+- DUPLICADOS_EXACTOS.csv
+- ARCHIVOS_FUERA_DEL_PROYECTO.csv
+- ARCHIVOS_VACIOS_REVISAR.csv
+- CARPETAS_RELACIONADAS.csv
