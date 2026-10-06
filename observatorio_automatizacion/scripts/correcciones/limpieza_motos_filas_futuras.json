@@ -1,0 +1,48 @@
+{
+ "descripcion": "Limpieza de 3 celdas de filas futuras (nov-26 y dic-26) en Transferencias de Motos F con cálculos que no son de la automatización: comparación sep-26 contra sep-23 (QB96 = -4,64; QB97 = =QB94-QB58 = -9; QC97 = 59). Se vuelven a 0 como el resto de la fila.",
+ "fuente": "limpieza_motos_202611",
+ "limpiar": [
+  {
+   "periodo": "2026-11",
+   "titulo": "Transferencias de Motos F",
+   "valor_erroneo": -4.639175257731949
+  },
+  {
+   "periodo": "2026-12",
+   "titulo": "Transferencias de Motos F",
+   "valor_erroneo": -9
+  },
+  {
+   "periodo": "2026-12",
+   "titulo": "Transferencias de Motos - Acumulado F",
+   "valor_erroneo": 59
+  }
+ ],
+ "controles": [
+  {
+   "periodo": "2026-09",
+   "titulo": "Transferencias de Motos F",
+   "esperado": 185
+  },
+  {
+   "periodo": "2026-09",
+   "titulo": "Transferencias de Motos - Acumulado F",
+   "esperado": 1729
+  },
+  {
+   "periodo": "2026-11",
+   "titulo": "Transferencias de Motos F",
+   "esperado": 0
+  },
+  {
+   "periodo": "2026-12",
+   "titulo": "Transferencias de Motos F",
+   "esperado": 0
+  },
+  {
+   "periodo": "2026-12",
+   "titulo": "Transferencias de Motos - Acumulado F",
+   "esperado": 0
+  }
+ ]
+}

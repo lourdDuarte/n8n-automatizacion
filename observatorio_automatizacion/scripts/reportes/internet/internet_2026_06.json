@@ -1,0 +1,49 @@
+{
+  "fuente": "INDEC - Accesos a internet",
+  "url": "https://www.indec.gob.ar/uploads/informesdeprensa/internet_09_2629C1A6F505.pdf",
+  "serie_url": "https://www.indec.gob.ar/ftp/cuadros/sociedad/serie22_accesos_internet.xlsx",
+  "consultado_en": "2026-10-05T11:07:07-03:00",
+  "periodo": "2026-06",
+  "periodos": [
+    "2026-04",
+    "2026-05",
+    "2026-06"
+  ],
+  "datos": {
+    "2026-04": {
+      "total_f": 582885,
+      "total_n": 51362327,
+      "moviles_f": 489635,
+      "moviles_n": 39594984,
+      "fijos_f": 93250,
+      "fijos_n": 11767343
+    },
+    "2026-05": {
+      "total_f": 581253,
+      "total_n": 51349896,
+      "moviles_f": 487565,
+      "moviles_n": 39512707,
+      "fijos_f": 93688,
+      "fijos_n": 11837189
+    },
+    "2026-06": {
+      "total_f": 580130,
+      "total_n": 51387137,
+      "moviles_f": 486300,
+      "moviles_n": 39471960,
+      "fijos_f": 93830,
+      "fijos_n": 11915177
+    }
+  },
+  "actualizacion": {
+    "celdas_actualizadas": 0,
+    "hubo_cambios": false,
+    "cambios": [],
+    "periodos": [
+      "2026-04",
+      "2026-05",
+      "2026-06"
+    ],
+    "respaldo": null
+  }
+}

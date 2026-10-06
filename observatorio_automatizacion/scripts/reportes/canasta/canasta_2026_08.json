@@ -1,0 +1,56 @@
+{
+  "fuente": "INDEC - CBA y CBT",
+  "periodo": "2026-08-01",
+  "anio": 2026,
+  "mes_numero": 8,
+  "url_informe": "https://www.indec.gob.ar/uploads/informesdeprensa/canasta_09_265C7188EBE6.pdf",
+  "consultado_en": "2026-10-05T11:04:00",
+  "valores": {
+    "YQ": 235103.36,
+    "YR": 2.6,
+    "YS": 39.6,
+    "YT": 23.2,
+    "YU": 519578.43,
+    "YV": 2.6,
+    "YW": 38.3,
+    "YX": 22.7,
+    "YY": 578354.27,
+    "YZ": 726469.38,
+    "ZA": 2.61,
+    "ZB": 39.56,
+    "ZC": 764085.92,
+    "ZD": 2.61,
+    "ZE": 39.56,
+    "ZF": 1278162.94,
+    "ZG": 1605497.35,
+    "ZH": 2.61,
+    "ZI": 38.31,
+    "ZJ": 1688629.9,
+    "ZK": 2.61,
+    "ZL": 38.31
+  },
+  "validaciones": {
+    "cantidad_valores": 22,
+    "filas_cba_cbt_detectadas": true
+  },
+  "actualizacion": {
+    "archivo_excel": "C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\base\\BASE DE DATOS INDICADORES PROPIOS.xlsx",
+    "fila": 93,
+    "celdas_actualizadas": 0,
+    "cambios": [],
+    "coincidencias": [
+      "YQ93",
+      "YR93",
+      "YS93",
+      "YU93",
+      "YV93",
+      "YW93",
+      "YY93",
+      "YZ93",
+      "ZC93",
+      "ZF93",
+      "ZG93",
+      "ZJ93"
+    ]
+  }
+}

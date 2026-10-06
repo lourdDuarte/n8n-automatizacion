@@ -1,0 +1,33 @@
+{
+  "fuente": "Índice de salarios",
+  "periodo": "2026-07-01",
+  "url_planilla": "https://www.indec.gob.ar/ftp/cuadros/sociedad/variaciones_salarios_09_26.xls",
+  "valores": {
+    "IS Sector privado registrado Var% i.m.": 2.25,
+    "IS Sector privado registrado Número índice octubre 2016=100": 9879.87,
+    "IS Sector público Var% i.m.": 2.97,
+    "IS Sector público Número índice octubre 2016=100": 8123.88,
+    "IS total registrado Var% i.m.": 2.49,
+    "IS total registrado Número índice octubre 2016=100": 9223.92,
+    "IS sector privado no registrado Var% i.m.": 3.89,
+    "IS sector privado no registrado Número índice octubre 2016=100": 11656.04,
+    "TOTAL IS Var% i.m.": 2.82,
+    "TOTAL IS Número índice octubre 2016=100": 9708.64,
+    "IS Sector privado registrado Var% i.a.": 29.67,
+    "IS Sector privado registrado con respecto a diciembre del año anterior (acum)": 17.04,
+    "IS Sector público Var% i.a.": 30.99,
+    "IS sector público con respecto diciembre del año anterior (acum)": 21.06,
+    "IS total registrado Var% i.a.": 30.1,
+    "IS total registrado con respecto a diciembre del año anterior (acum)": 18.34,
+    "IS sector privado no registrado Var% i.a.": 59.94,
+    "IS sector privado no registrado con respecto a diciembre del año anterior (acum)": 34.41,
+    "TOTAL IS Var% i.a.": 36.18,
+    "TOTAL IS con respecto a diciembre del año anterior (acum)": 21.82,
+    "IS sector público nacional Var% i.m.": 3.89,
+    "IS sector público nacional Var% i.a.": 27.54,
+    "IS sector público nacional con respecto a diciembre del año anterior": 18.1,
+    "IS sector público provincial Var% i.m.": 3.16,
+    "IS sector público provincial Var% i.a.": 30.39,
+    "IS sector público provincial con respecto a diciembre del año anterior": 20.03
+  }
+}

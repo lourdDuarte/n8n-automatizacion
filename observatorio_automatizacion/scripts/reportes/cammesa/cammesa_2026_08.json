@@ -1,0 +1,38 @@
+{
+  "fuente": "CAMMESA - Demanda Mensual",
+  "periodo": "2026-08",
+  "unidad": "MWh",
+  "archivo_zip": "BASE_INFORME_MENSUAL_2026-08.zip",
+  "archivo_excel": "Demanda_Mensual_2026-08.xlsx",
+  "datos": {
+    "demanda_comercial": 33867.37,
+    "variacion_mensual_comercial": -5.06,
+    "variacion_anual_comercial": 0.81,
+    "demanda_industrial_comercial_grande": 7703.66,
+    "variacion_mensual_industrial_comercial_grande": 2.16,
+    "variacion_anual_industrial_comercial_grande": 10.36,
+    "demanda_residencial": 56426.97,
+    "variacion_mensual_residencial": -11.63,
+    "variacion_anual_residencial": 9.93
+  },
+  "validaciones": {
+    "Comercial": {
+      "registros_actuales": 2,
+      "actual": 33867.37,
+      "mes_anterior": 35674.08,
+      "mismo_mes_anio_anterior": 33596.06
+    },
+    "Industrial/Comercial Grande": {
+      "registros_actuales": 2,
+      "actual": 7703.66,
+      "mes_anterior": 7540.89,
+      "mismo_mes_anio_anterior": 6980.42
+    },
+    "Residencial": {
+      "registros_actuales": 4,
+      "actual": 56426.97,
+      "mes_anterior": 63851.68,
+      "mismo_mes_anio_anterior": 51328.89
+    }
+  }
+}

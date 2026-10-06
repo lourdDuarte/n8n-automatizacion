@@ -1,0 +1,160 @@
+{
+  "id": "h2ieKNewbtWsRRkJ",
+  "name": "AVISO DE ERRORES - DIAGNÓSTICO MEJORADO",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "12eba242-24c9-4d5e-8b27-4b6e475a7b77",
+      "name": "Error del workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('Seleccionar diagnóstico').first().json;\nconst e = original.execution || {};\nconst w = original.workflow || {};\nconst err = e.error || {};\n\nconst limpiar = v => String(v ?? '')\n  .replace(/[\\r\\n\\t]+/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim();\n\nlet resumen = null;\ntry {\n  const candidato = JSON.parse(String($json.stdout || '{}').replace(/^\\uFEFF/, ''));\n  const fin = candidato.fin ? new Date(candidato.fin).getTime() : 0;\n  const reciente = fin && Math.abs(Date.now() - fin) <= 30 * 60 * 1000;\n  if (reciente) resumen = candidato;\n} catch {}\n\nconst clasificar = texto => {\n  const t = limpiar(texto).toLowerCase();\n  if (/encabezado|header|columna.*no.*encontr/.test(t)) return 'Encabezado o columna no encontrada';\n  if (/no.*disponible|todavía|aún no|periodo esperado/.test(t)) return 'Publicación todavía no disponible';\n  if (/valor.*no.*encontr|no se encontró|faltan/.test(t)) return 'Valor no encontrado en la fuente';\n  if (/download|descarg|http|connection|timeout/.test(t)) return 'Error de descarga o conexión';\n  if (/google|sheet|row_number|fila/.test(t)) return 'Error al localizar o escribir la fila de destino';\n  return 'Error de ejecución';\n};\n\nconst extraerMotivo = r => {\n  const bruto = limpiar(r.error_final || r.detalle || r.salida_final || '');\n  if (!bruto) return '';\n  const lineas = bruto.split(/(?=ERROR(?: FINAL)?:|RESULTADO: ERROR|No se |El período|El IPI)/i);\n  return limpiar(lineas[lineas.length - 1]).slice(0, 1200);\n};\n\nconst fecha = new Date().toLocaleString('es-AR', {\n  timeZone: 'America/Argentina/Buenos_Aires'\n});\nconst lineas = [\n  '⚠️ ERROR EN LA AUTOMATIZACIÓN', '',\n  `Fecha: ${fecha}`,\n  `Workflow: ${limpiar(w.name || 'No identificado')}`,\n  `Nodo: ${limpiar(e.lastNodeExecuted || 'No identificado')}`\n];\n\nconst fallidos = (resumen?.resultados || []).filter(r => r.estado === 'ERROR');\nif (fallidos.length) {\n  for (const r of fallidos) {\n    lineas.push('', `Indicador: ${limpiar(r.nombre || r.fuente)}`);\n    if (r.periodo) lineas.push(`Período: ${limpiar(r.periodo)}`);\n    const motivo = extraerMotivo(r) || 'La fuente no entregó un detalle adicional.';\n    lineas.push(`Tipo: ${clasificar(motivo)}`);\n    lineas.push(`Motivo: ${motivo}`);\n    lineas.push('Estado: no actualizado.');\n  }\n} else {\n  let detalle = limpiar(err.message || err.description || 'Error no especificado');\n  if (detalle.length > 1200) detalle = detalle.slice(0, 1200) + '…';\n  lineas.push('', 'Motivo:', detalle);\n}\n\nlineas.push('', 'La base conserva los datos anteriores del indicador afectado.');\nlet mensaje = lineas.join('\\n');\nif (mensaje.length > 3900) mensaje = mensaje.slice(0, 3860) + '\\n…mensaje abreviado.';\nreturn [{ json: { mensaje } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "id": "715258df-5b02-4899-bc89-d1397d6385d5",
+      "name": "Preparar aviso de error"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $json.execution || {};\nconst nodo = String(e.lastNodeExecuted || '').toLowerCase();\nconst base = \"/opt/observatorio/automatizacion_indicadores/salidas_n8n/\";\nlet archivo = '';\nif (nodo.includes('generales')) archivo = 'resumen_general.json';\nelse if (nodo.includes('complejos')) archivo = 'resumen_complejos.json';\nelse if (nodo.includes('productivos')) archivo = 'resumen_productivos.json';\nreturn [{ json: { ...$json, ruta_resumen: archivo ? base + archivo : '' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "b19f156b-c753-4034-9dcd-67e52a30375b",
+      "name": "Seleccionar diagnóstico"
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.ruta_resumen ? 'cat \"' + $json.ruta_resumen + '\" 2>/dev/null || echo \"{}\"' : 'echo \"{}\"' }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        480,
+        0
+      ],
+      "id": "c171e9ec-e1a4-426e-8c00-3480b0002252",
+      "name": "Leer diagnóstico del indicador"
+    },
+    {
+      "parameters": {
+        "chatId": "-5396908101",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "id": "8199e3ae-f082-4773-8600-e8d6f99d07bb",
+      "position": [
+        848,
+        -240
+      ],
+      "name": "Enviar error Telegram - Grupo",
+      "webhookId": "be9641e5-4160-4618-a8cc-d902461782ae",
+      "credentials": {
+        "telegramApi": {
+          "id": "MHTybspCsTjmWGGv",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "8829533357",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "id": "9f8add50-71cc-48c9-b556-091c8c3afe74",
+      "position": [
+        864,
+        208
+      ],
+      "name": "Enviar error por Telegram - Personal",
+      "webhookId": "be9641e5-4160-4618-a8cc-d902461782ae",
+      "credentials": {
+        "telegramApi": {
+          "id": "MHTybspCsTjmWGGv",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Error del workflow": {
+      "main": [
+        [
+          {
+            "node": "Seleccionar diagnóstico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Seleccionar diagnóstico": {
+      "main": [
+        [
+          {
+            "node": "Leer diagnóstico del indicador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer diagnóstico del indicador": {
+      "main": [
+        [
+          {
+            "node": "Preparar aviso de error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar aviso de error": {
+      "main": [
+        [
+          {
+            "node": "Enviar error por Telegram - Personal",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Enviar error Telegram - Grupo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "active": false,
+  "pinData": {},
+  "meta": {},
+  "tags": []
+}

@@ -1,5 +1,0 @@
-﻿"Origen","Nombre","Ruta","Extension","TamanoBytes","Modificado","SHA256","DentroProyectoActivo"
-"PROYECTO_ACTIVO","indicadores_eph.json","C:\Users\daeco\Desktop\automatizacion_indicadores\config\indicadores_eph.json",".json","0","2026-08-03 12:40:36","E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855","True"
-"PROYECTO_ACTIVO","indicadores_ipi.json","C:\Users\daeco\Desktop\automatizacion_indicadores\config\indicadores_ipi.json",".json","0","2026-07-27 19:24:55","E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855","True"
-"PROYECTO_ACTIVO","actualizar_base_eph.py","C:\Users\daeco\Desktop\automatizacion_indicadores\scripts\eph\actualizar_base_eph.py",".py","0","2026-08-03 12:28:46","E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855","True"
-"PROYECTO_ACTIVO","control_eph.py","C:\Users\daeco\Desktop\automatizacion_indicadores\scripts\eph\control_eph.py",".py","0","2026-08-03 12:28:39","E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855","True"

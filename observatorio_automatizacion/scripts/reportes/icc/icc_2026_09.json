@@ -1,0 +1,16 @@
+{
+  "fuente": "ICC - UTDT",
+  "periodo": "2026-09-01",
+  "url_informe": "https://www.utdt.edu/download.php?fname=_178964914755427100.pdf",
+  "valores": {
+    "Indice de Confianza del Consumidor por Regiones: Interior": 46.11,
+    "Indice de Confianza del Consumidor Interior Variación respecto al mes anterior": 5.23,
+    "Indice de Confianza del Consumidor Interior Variación respecto a mismo mes del año anterior": 3.28,
+    "Indice de Confianza del Consumidor Nacional": 41.18,
+    "Indice de Confianza del Consumidor Nacional Variación respecto al mes anterior N": 2.37,
+    "Indice de Confianza del Consumidor Nacional Variación respecto a mismo mes del año anterior N": 3.44
+  },
+  "calculos_propios": [
+    "Indice de Confianza del Consumidor Interior Acumulado del año"
+  ]
+}

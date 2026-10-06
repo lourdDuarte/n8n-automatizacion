@@ -1,0 +1,45 @@
+{
+  "fuente": "ATP - Recaudación Tributaria Provincial",
+  "url": "https://www.formosa.gob.ar/atp/recaudaciones",
+  "consultado_en": "2026-10-05T11:03:43-03:00",
+  "periodo": "2026-09",
+  "recaudacion": 20486963983.45,
+  "valores": {
+    "Recaudación tributaria F": 20486963983.45,
+    "Recaudación de IIBB F": 17068618878.88,
+    "Recaudación Imp.\nde Sellos F": 2388560607.6,
+    "Recaudacion tasas Retrib.\nde Servicios F": 816645138.79,
+    "Recaudacion Reg. de Facil.\nde Pago\t": 7122854.4,
+    "Recaudacion Inmob. Rural": 168860007.0,
+    "Recaudacion Imp. a los\nJuegos de Azar": 37156496.78,
+    "Recaudacion Transf. Mej.\ne/Tier.\nFisc.": 0.0
+  },
+  "actualizacion": {
+    "archivo_excel": "C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\base\\BASE DE DATOS INDICADORES PROPIOS.xlsx",
+    "hoja": "BASE DE DATOS",
+    "periodo": "2026-09",
+    "fila_localizada": 94,
+    "celdas_actualizadas": 0,
+    "hubo_cambios": false,
+    "cambios": [],
+    "coincidencias": [
+      "VG94",
+      "VR94",
+      "VZ94",
+      "WC94",
+      "WF94",
+      "WI94",
+      "WL94",
+      "WO94"
+    ],
+    "respaldo": null
+  },
+  "ajuste_real": {
+    "estado": "OK",
+    "periodo": "2026-09",
+    "tasa_estimada": 1.9,
+    "tasa_anterior": 1.9,
+    "fuente_iaraf": "C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\fuentes\\iaraf\\iaraf_transferencias_2026_09.pdf",
+    "formulas_completadas": []
+  }
+}

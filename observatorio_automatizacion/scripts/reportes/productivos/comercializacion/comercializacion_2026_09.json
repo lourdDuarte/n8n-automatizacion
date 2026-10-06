@@ -1,0 +1,55 @@
+{
+  "fuente": "Agricultura - Comercialización de granos",
+  "periodo": "2026-09-01",
+  "anio": 2026,
+  "mes_numero": 9,
+  "consultado_en": "2026-10-05T11:01:12-03:00",
+  "url_precios_internos": "https://www.magyp.gob.ar/sitio/areas/ss_mercados_agropecuarios/areas/granos/_archivos/000056_Precios%20Locales/000010_Precios%20Internos%20de%20los%20Principales%20Granos/000001_Informe%20Actual%20de%20la%20Evolucion%20Precios%20Internos%20de%20Granos.php",
+  "url_precios_externos": "https://www.magyp.gob.ar/sitio/areas/ss_mercados_agropecuarios/areas/granos/_archivos/000057_Precios%20Internacionales/000030_Evoluci%C3%B3n%20de%20los%20Precios%20Externos/000001_Granos%20%28Mensual%20en%20u%24s-tn%29/000002_Historicos%20de%20la%20Evoluci%C3%B3n%20de%20los%20Precios%20Externos%20de%20Granos.xlsx",
+  "valores": {
+    "nacional_maiz": 293319.27,
+    "internacional_maiz": 222.0,
+    "nacional_sorgo": 281978.16,
+    "internacional_sorgo": 215.0,
+    "nacional_soja": 558850.0,
+    "internacional_soja": 508.0,
+    "nacional_trigo": 346366.68,
+    "internacional_trigo": 260.0
+  },
+  "validaciones": {
+    "precios_internos_rosario": true,
+    "precios_externos_fob_puertos_argentinos": true,
+    "fuentes_mismo_periodo": true,
+    "cantidad_valores_originales": 8
+  },
+  "actualizacion": {
+    "archivo_excel": "C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\base\\BASE DE DATOS INDICADORES PROPIOS.xlsx",
+    "hoja": "BASE DE DATOS - Indicadores Pro",
+    "periodo": "2026-09",
+    "fila_localizada": 90,
+    "celdas_actualizadas": 0,
+    "hubo_cambios": false,
+    "cambios": [],
+    "coincidencias": [
+      "C90",
+      "E90",
+      "G90",
+      "I90",
+      "K90",
+      "M90",
+      "O90",
+      "Q90"
+    ],
+    "formulas_conservadas": [
+      "D90",
+      "F90",
+      "H90",
+      "J90",
+      "L90",
+      "N90",
+      "P90",
+      "R90"
+    ],
+    "respaldo": null
+  }
+}

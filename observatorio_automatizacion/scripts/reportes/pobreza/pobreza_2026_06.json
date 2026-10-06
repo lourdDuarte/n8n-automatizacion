@@ -1,0 +1,25 @@
+{
+  "fuente": "Pobreza e indigencia",
+  "periodo": "2026-06-01",
+  "semestre": "1S 2026",
+  "url_informe": "https://www.indec.gob.ar/ftp/cuadros/sociedad/cuadros_informe_pobreza_09_26.xls",
+  "nota_cantidades": "INDEC publica las cantidades en miles redondeadas; se multiplicaron por 1000.",
+  "valores": {
+    "Pobreza (cant. hogares) F*": 20000,
+    "Pobreza (% sobre el total de hogares) F*": 24.4,
+    "Pobreza (cant. personas) F*": 80000,
+    "Pobreza (% sobre el total de personas) F*": 29.9,
+    "Pobreza (cant. hogares) N*": 2498000,
+    "Pobreza (% sobre el total de hogares) N*": 24.4,
+    "Pobreza (cant. personas) N*": 9729000,
+    "Pobreza (% sobre el total de personas) N*": 32.3,
+    "Indigencia (cant. hogares) F*": 3000,
+    "Indigencia (% sobre el total de hogares) F*": 4.1,
+    "Indigencia (cant. personas) F*": 16000,
+    "Indigencia (% sobre el total de personas) F*": 5.9,
+    "Indigencia (cant. hogares) N*": 575000,
+    "Indigencia (% sobre el total de hogares) N*": 5.6,
+    "Indigencia (cant. personas) N*": 2249000,
+    "Indigencia (% sobre el total de personas) N*": 7.5
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "fuente": "pecuaria",
+  "nombre": "Actividad pecuaria",
+  "periodo": "2026-08-01",
+  "consultado_en": "2026-10-05T11:01:20-03:00",
+  "registros": [
+    {
+      "periodo": "2025-12-01",
+      "stock_bovino_formosa": 1557671.0,
+      "stock_bovino_nacion": 50920790.0
+    },
+    {
+      "periodo": "2026-03-01",
+      "stock_porcino_formosa": 105734.0,
+      "stock_porcino_nacion": 5387190.0
+    },
+    {
+      "periodo": "2026-08-01",
+      "faena_bovina_nacion": 1011334,
+      "consumo_bovino": 41.15,
+      "faena_bovina_formosa": 4102.0,
+      "huevos_industria": 94148,
+      "faena_aviar": 57103,
+      "produccion_carne_aviar": 187000,
+      "consumo_aviar": 47.08,
+      "faena_porcina_nacion": 784238,
+      "consumo_porcino": 21.02
+    }
+  ],
+  "urls": {
+    "stock_bovino": "https://www.magyp.gob.ar/sitio/areas/bovinos/informacion_interes/informes/_archivos/000001=Series%20de%20stock%20bovino%20y%20mapas/000000_Stock/251231_Serie%20stock%20Bovino%20por%20provincia%20al%2031-12%20(2007-2025).xlsx",
+    "faena_bovina": "https://www.magyp.gob.ar/sitio/areas/bovinos/informacion_interes/informes/_archivos/000010=Faena%20y%20Producci%C3%B3n/000008_Informe_MENSUAL_de_faena_y_produccion_de_carne_bovina.pdf",
+    "faena_bovina_excel": "https://www.magyp.gob.ar/sitio/areas/ss_ganaderia/archivos/Planilla_Informe_Faena_Bovina_.xls",
+    "indicadores_bovinos_pdf": "https://www.magyp.gob.ar/sitio/areas/bovinos/informacion_sectorial/_archivos/000010_Tablero%20de%20indicadores%20sectoriales/000011-Tablero%20de%20indicadores%20sectoriales%20Bovino.pdf",
+    "aves_oferta_demanda": "https://www.magyp.gob.ar/sitio/areas/aves/estadistica/carne/_archivos/000008_Indicadores%20Actuales/260000_2026/000000_Indicadores%20de%20Oferta%20y%20Demanda%202016-2026.xlsx",
+    "aves_huevos": "https://www.magyp.gob.ar/sitio/areas/aves/estadistica/huevos/_archivos/260000_2026/000000_Industrializaci%C3%B3n%20de%20Huevos.pdf",
+    "stock_porcino": "https://www.magyp.gob.ar/sitio/areas/porcinos/estadistica/_archivos/000009_Stocks/260000_Existencias%20Porcinas%20al%2031-03-2026.xlsx",
+    "indicadores_porcinos": "https://www.magyp.gob.ar/sitio/areas/porcinos/estadistica/_archivos/000007_Evoluci%C3%B3n%20de%20los%20Indicadores/000000_Evolucion%20Mensual%20Indicadores.xlsx",
+    "indicadores_bovinos": "https://www.magyp.gob.ar/sitio/areas/ss_ganaderia/archivos/Planilla_indicadores_bovinos_desde_1990_MENSUAL.xlsx"
+  },
+  "actualizacion": {
+    "hoja": "BASE DE DATOS - Indicadores Pro",
+    "celdas_actualizadas": 0,
+    "hubo_cambios": false,
+    "cambios": [],
+    "filas_localizadas": [],
+    "fila_localizada": null,
+    "periodos_por_fila": {},
+    "respaldo": null
+  }
+}

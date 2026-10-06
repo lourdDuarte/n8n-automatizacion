@@ -1,0 +1,616 @@
+{
+  "id": "L5xOhZFolAyM0qQr",
+  "name": "PRINCIPAL - ORDENADO - TELEGRAM MEJORADO",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        624,
+        0
+      ],
+      "id": "9edecd0b-4990-4c60-9dab-dcf1e3eda812",
+      "name": "Ejecución manual"
+    },
+    {
+      "parameters": {
+        "command": "=powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; Set-Location 'C:\\Users\\daeco\\Desktop\\automatizacion_indicadores'; Remove-Item -LiteralPath 'C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\salidas_n8n\\resumen_complejos.json','C:\\Users\\daeco\\.n8n-files\\resumen_complejos.json' -ErrorAction SilentlyContinue; & 'C:\\Users\\daeco\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe' -u '.\\ejecutar_complejos.py' --fuentes '{{ $json.fuente === 'complejo' || $json.fuente === 'complejos' ? 'todas' : ($json.fuente || 'todas') }}' --estricto; if (Test-Path -LiteralPath 'C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\salidas_n8n\\resumen_complejos.json') { Copy-Item -LiteralPath 'C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\salidas_n8n\\resumen_complejos.json' -Destination 'C:\\Users\\daeco\\.n8n-files\\resumen_complejos.json' -Force; exit 0 }; exit 1\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1312,
+        32
+      ],
+      "id": "eb7bcbb4-469f-4d4b-b098-2f2038d99ede",
+      "name": "Ejecutar indicadores complejos",
+      "notesInFlow": true,
+      "onError": "continueRegularOutput",
+      "notes": "Manual: ejecuta la fuente elegida. A las 17 h: revisa EMAE, salarios, ICC y supermercados."
+    },
+    {
+      "parameters": {
+        "command": "=powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; Set-Location 'C:\\Users\\daeco\\Desktop\\automatizacion_indicadores'; Remove-Item -LiteralPath 'C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\salidas_n8n\\resumen_productivos.json','C:\\Users\\daeco\\.n8n-files\\resumen_productivos.json' -ErrorAction SilentlyContinue; & 'C:\\Users\\daeco\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe' -u '.\\ejecutar_productivos.py' --fuentes '{{ $json.fuente === 'productivo' || $json.fuente === 'productivos' ? 'todas' : ($json.fuente || 'todas') }}' --estricto; if (Test-Path -LiteralPath 'C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\salidas_n8n\\resumen_productivos.json') { Copy-Item -LiteralPath 'C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\salidas_n8n\\resumen_productivos.json' -Destination 'C:\\Users\\daeco\\.n8n-files\\resumen_productivos.json' -Force; exit 0 }; exit 1\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1312,
+        224
+      ],
+      "id": "121ef4c2-d56b-4ad2-8c05-1f912e3b05fb",
+      "name": "Ejecutar indicadores productivos",
+      "notesInFlow": true,
+      "onError": "continueRegularOutput",
+      "notes": "Manual: comercializacion. A las 17 h: revisa todos los productivos configurados."
+    },
+    {
+      "parameters": {
+        "jsCode": "const entradas = $input.all();\nconst actualizaciones = [];\n\nconst limpiarTitulo = valor => String(valor ?? '')\n  .replace(/[\\r\\n\\t]+/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .toLocaleLowerCase('es');\n\nconst corregirTitulo = titulo => {\n  const equivalencias = {\n    'Recaudación Imp.\\nde Sellos F':\n      'Recaudación Imp.\\r\\nde Sellos F',\n\n    'Recaudacion Reg. de Facil.\\nde Pago\\t':\n      'Recaudacion Reg. de Facil.\\r\\nde Pago\\t',\n\n    'Recaudacion Imp. a los\\nJuegos de Azar':\n      'Recaudacion Imp. a los\\r\\nde Juegos de Azar'\n  };\n\n  return equivalencias[titulo] || titulo;\n};\n\nconst totalesEsperados = {\n  ipi: 48,\n  cammesa: 9,\n  ipc: 68,\n  canasta: 22,\n  sipa: 70,\n  icc: 6\n};\n\nconst perteneceAFuente = (titulo, fuente) => {\n  const texto = limpiarTitulo(titulo);\n\n  if (fuente === 'ipi') {\n    return /^ipi\\b/.test(texto) ||\n      texto.includes('ipi divisiones');\n  }\n\n  if (fuente === 'ipc') {\n    return /\\bipc\\b/.test(texto) ||\n      texto.startsWith('indice de precios al consumidor');\n  }\n\n  if (fuente === 'canasta') {\n    return /\\bcba\\b|\\bcbt\\b/.test(texto) ||\n      texto.includes('canasta básica');\n  }\n\n  if (fuente === 'sipa') {\n    return texto.includes('trabajo registrado') ||\n      texto.includes('asalariados registrados') ||\n      texto.includes('remuneración mediana') ||\n      texto.includes('remuneración promedio');\n  }\n\n  if (fuente === 'cammesa') {\n    return texto.includes('demanda (mwh)') ||\n      texto.includes('categoría tarifa') ||\n      texto.includes('categoria tarifa');\n  }\n\n  if (fuente === 'icc') {\n    return texto.includes('confianza del consumidor');\n  }\n\n  return false;\n};\n\nfor (let indice = 0; indice < entradas.length; indice++) {\n  const buffer = await this.helpers.getBinaryDataBuffer(\n    indice,\n    'data'\n  );\n\n  const resumen = JSON.parse(\n    buffer.toString('utf8').replace(/^\\uFEFF/, '')\n  );\n\n  const cargasBase = (\n    resumen.actualizaciones_google || []\n  ).filter(item => item.hoja === 'BASE DE DATOS');\n\n  const hayCargaGoogle = cargasBase.length > 0;\n  const inicioSalida = actualizaciones.length;\n\n  const titulosEnviados = cargasBase\n    .flatMap(item => Object.keys(item.valores || {}))\n    .filter(titulo =>\n      limpiarTitulo(titulo) !== 'periodo' &&\n      !String(titulo).startsWith('__')\n    );\n\n  const resultados = (\n    resumen.resultados || []\n  ).map(resultadoFuente => ({\n    ...resultadoFuente,\n\n    error_final: resultadoFuente.error_final || '',\n    salida_final: resultadoFuente.salida_final || '',\n    detalle: resultadoFuente.detalle || '',\n\n    celdas_actualizadas: Number(\n      resultadoFuente.celdas_actualizadas || 0\n    ),\n\n    cambios: Array.isArray(resultadoFuente.cambios)\n      ? resultadoFuente.cambios\n      : [],\n\n    detalle_completo: Array.isArray(\n      resultadoFuente.detalle_completo\n    )\n      ? resultadoFuente.detalle_completo\n      : []\n  }));\n\n  const correctos = resultados.filter(\n    resultado => resultado.estado === 'OK'\n  );\n\n  const cargas = [];\n\n  for (const resultado of correctos) {\n    const fuente = limpiarTitulo(resultado.fuente);\n\n    const publicados = new Set(\n      resultado.cambios.map(cambio =>\n        limpiarTitulo(cambio.titulo || '')\n      )\n    );\n\n    let titulos = cargasBase\n      .filter(item =>\n        !resultado.periodo ||\n        String(item.periodo).slice(0, 7) ===\n          String(resultado.periodo).slice(0, 7) ||\n        String(item.periodo).toLowerCase() ===\n          String(resultado.periodo).toLowerCase()\n      )\n      .flatMap(item => Object.keys(item.valores || {}))\n      .filter(titulo =>\n        publicados.has(limpiarTitulo(titulo))\n      );\n\n    if (!titulos.length) {\n      titulos = titulosEnviados.filter(titulo =>\n        perteneceAFuente(titulo, fuente)\n      );\n    }\n\n    if (!titulos.length && correctos.length === 1) {\n      titulos = titulosEnviados;\n    }\n\n    const enviadas = new Set(\n      titulos.map(limpiarTitulo)\n    ).size;\n\n    if (!enviadas && !resultado.celdas_actualizadas) {\n      continue;\n    }\n\n    cargas.push({\n      fuente,\n      nombre: resultado.nombre,\n      periodo: resultado.periodo,\n\n      columnas_enviadas: enviadas,\n\n      columnas_esperadas: Number(\n        totalesEsperados[fuente] ||\n        resultado.detalle_completo.length ||\n        enviadas\n      ),\n\n      celdas_actualizadas:\n        resultado.celdas_actualizadas,\n\n      columnas_faltantes: [],\n      cambios: resultado.cambios\n    });\n  }\n\n  if (!cargas.length && hayCargaGoogle) {\n    const enviadas = new Set(\n      titulosEnviados.map(limpiarTitulo)\n    ).size;\n\n    const unico = correctos.length === 1\n      ? correctos[0]\n      : null;\n\n    const fuente = limpiarTitulo(\n      unico?.fuente || 'varios'\n    );\n\n    cargas.push({\n      fuente,\n\n      nombre: unico?.nombre ||\n        'Indicadores del Observatorio',\n\n      periodo: unico?.periodo ||\n        cargasBase[0]?.periodo,\n\n      columnas_enviadas: enviadas,\n\n      columnas_esperadas: Number(\n        totalesEsperados[fuente] || enviadas\n      ),\n\n      celdas_actualizadas: Number(\n        unico?.celdas_actualizadas || 0\n      ),\n\n      columnas_faltantes: [],\n      cambios: unico?.cambios || []\n    });\n  }\n\n  const aviso = {\n    estado: resumen.estado,\n    inicio: resumen.inicio,\n    fin: resumen.fin,\n    solicitadas: resumen.solicitadas,\n    ejecutadas: resumen.ejecutadas,\n\n    errores: resumen.errores || [],\n    omitidas: resumen.omitidas || [],\n    notificacion: resumen.notificacion || {},\n\n    resultados,\n\n    formato_sheet: resumen.formato_sheet || {},\n    finalizacion: resumen.finalizacion || {},\n\n    cargas\n  };\n\n  if (hayCargaGoogle) {\n    // Comparar contra el Sheet aunque el Excel local\n    // no haya cambiado.\n    for (const item of cargasBase) {\n      if (!item.periodo) {\n        throw new Error(\n          'La actualización no contiene el período correspondiente.'\n        );\n      }\n\n      const valores = {};\n\n      for (\n        const [titulo, valor]\n        of Object.entries(item.valores || {})\n      ) {\n        if (\n          limpiarTitulo(titulo) === 'periodo' ||\n          String(titulo).startsWith('__')\n        ) {\n          continue;\n        }\n\n        valores[corregirTitulo(titulo)] = valor;\n      }\n\n      if (!Object.keys(valores).length) {\n        throw new Error(\n          `La carga de ${item.periodo} no contiene columnas del indicador.`\n        );\n      }\n\n      actualizaciones.push({\n        json: {\n          PERIODO: item.periodo,\n          ...valores\n        }\n      });\n    }\n  } else {\n    // Conservar el diagnóstico para Telegram cuando\n    // no haya cargas preparadas.\n    actualizaciones.push({\n      json: {\n        __solo_aviso: true\n      }\n    });\n  }\n\n  if (actualizaciones.length > inicioSalida) {\n    const ultimo = actualizaciones[\n      actualizaciones.length - 1\n    ].json;\n\n    ultimo.__enviar_aviso = true;\n    ultimo.__aviso = aviso;\n  }\n}\n\nreturn actualizaciones;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        400
+      ],
+      "id": "a62f6304-c0e0-4f10-b9de-9795c0d65ef4",
+      "name": "Preparar carga"
+    },
+    {
+      "parameters": {
+        "jsCode": "// carga Productivos — Python ya escribió y verificó en el Sheet.\n// Este nodo solo pasa el aviso para Telegram.\nconst salida = [];\nconst entradas = $input.all();\nfor (let i = 0; i < entradas.length; i++) {\n  const buffer = await this.helpers.getBinaryDataBuffer(i, 'data');\n  const resumen = JSON.parse(buffer.toString('utf8').replace(/^\\uFEFF/, ''));\n  salida.push({\n    json: {\n      __solo_aviso: true,\n      __enviar_aviso: true,\n      __aviso: {\n        estado: resumen.estado,\n        inicio: resumen.inicio,\n        fin: resumen.fin,\n        errores: resumen.errores || [],\n        notificacion: resumen.notificacion || {},\n        resultados: resumen.resultados || []\n      }\n    }\n  });\n}\nreturn salida;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        224
+      ],
+      "id": "2ebf3be1-2ab0-454f-b376-77541c65556e",
+      "name": "carga Productivos"
+    },
+    {
+      "parameters": {
+        "fileSelector": "C:\\Users\\daeco\\.n8n-files\\resumen_productivos.json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        1488,
+        224
+      ],
+      "id": "13cb6149-6a0d-49f6-8f75-a9bfc5de2ece",
+      "name": "Leer Productivos"
+    },
+    {
+      "parameters": {
+        "fileSelector": "C:\\Users\\daeco\\.n8n-files\\resumen_general.json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        1488,
+        400
+      ],
+      "id": "e1932d90-b03f-4f55-bd7d-9f7cb9f6ac8f",
+      "name": "leer General"
+    },
+    {
+      "parameters": {
+        "fileSelector": "C:\\Users\\daeco\\.n8n-files\\resumen_complejos.json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        1488,
+        32
+      ],
+      "id": "f5c6dbaa-e9b9-41c1-8676-3b5295593a8e",
+      "name": "Leer Complejos"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "Hgo6b3ZFv9xpIzJK",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/Hgo6b3ZFv9xpIzJK",
+          "cachedResultName": "Actualizar Base del Observatorio"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1856,
+        304
+      ],
+      "id": "eef85854-0549-40bd-9017-3a58140a69b7",
+      "name": "Call 'Actualizar Base del Observatorio'",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "command": "=powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; Set-Location 'C:\\Users\\daeco\\Desktop\\automatizacion_indicadores'; Remove-Item -LiteralPath 'C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\salidas_n8n\\resumen_general.json','C:\\Users\\daeco\\.n8n-files\\resumen_general.json' -ErrorAction SilentlyContinue; & 'C:\\Users\\daeco\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe' -u '.\\ejecutar_general.py' --fuentes '{{ $json.fuente === 'general' || $json.fuente === 'generales' ? 'todas' : ($json.fuente || 'todas') }}' --estricto {{ $json.fuente ? '--forzar-google' : '' }}; if (Test-Path -LiteralPath 'C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\salidas_n8n\\resumen_general.json') { Copy-Item -LiteralPath 'C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\salidas_n8n\\resumen_general.json' -Destination 'C:\\Users\\daeco\\.n8n-files\\resumen_general.json' -Force; exit 0 }; exit 1\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1312,
+        416
+      ],
+      "id": "2939f270-d568-4734-a51c-3e47bdeef918",
+      "name": "Ejecutar indicadores generales",
+      "notesInFlow": true,
+      "onError": "continueRegularOutput",
+      "notes": "Manual: ejecuta la fuente elegida. A las 17 h: revisa todas las fuentes generales."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f4969c11-edb0-45b1-bc69-3867e669a2ff",
+              "name": "fuente",
+              "value": "iaraf",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        624,
+        416
+      ],
+      "id": "4ef0c1d6-fab8-4d40-822f-9c91d56b7d42",
+      "name": "Elegir indicador puntual",
+      "notesInFlow": true,
+      "notes": "Cambiar solamente el valor 'fuente'.\nGenerales: atp, dnrpa, iaraf, canasta, sipa, ipi, ieric, ipc, srt, combustibles, transferencias_fiscales.\nComplejos: emae, salarios, icc, supermercados, pobreza.\nProductivos: comercializacion, pecuaria, estimaciones (o 'productivos' = todas).\nSolo una vez: srt_historico; ieric_correccion; correccion_transferencias (acumulado Nación 2026)."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "e812f701-016e-4e15-973e-7c5ae66f720a",
+              "leftValue": "={{ ['emae','salarios','icc','supermercados','pobreza','complejos'].includes(String($json.fuente || '').trim().toLowerCase()) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        864,
+        112
+      ],
+      "id": "5380c533-74c2-4f1e-8e9d-4217c465b8ea",
+      "name": "Es indicador complejo"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "64f087f1-cb59-4664-9aa6-65f762f7e748",
+              "leftValue": "={{ $json.__enviar_aviso === true || !!$json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2048,
+        304
+      ],
+      "id": "6b8a2cc1-11ab-40c5-b5cc-350dacfa82d6",
+      "name": "¿Enviar aviso?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar mensaje Telegram — el texto lo arma Python (scripts/comun/mensaje_telegram.py)\nconst items = $input.all().map(item => item.json || {});\nconst conAviso = items.find(item => item.__aviso) || {};\nconst aviso = conAviso.__aviso || {};\nconst texto = aviso.notificacion && aviso.notificacion.mensaje_telegram;\n\nconst errores = items\n  .filter(item => item.error)\n  .map(item => typeof item.error === 'string'\n    ? item.error\n    : (item.error.message || item.error.description || JSON.stringify(item.error)));\n\nif (texto) {\n  let mensaje = texto;\n  if (errores.length) {\n    mensaje += '\\n\\n❌ Error en n8n: ' + errores.join(' | ').slice(0, 400);\n  }\n  return [{ json: { mensaje } }];\n}\n\nconst fecha = new Date().toLocaleString('es-AR', { timeZone: 'America/Asuncion' });\nconst mensaje = [\n  '⚠️ REVISIÓN SIN RESUMEN',\n  '',\n  `Fecha: ${fecha}`,\n  '',\n  errores.length\n    ? '❌ ' + errores.join(' | ').slice(0, 800)\n    : 'El ejecutor de Python no entregó el aviso. Revisar salidas_n8n y los logs.'\n].join('\\n');\nreturn [{ json: { mensaje } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2272,
+        288
+      ],
+      "id": "c12c5e6a-05e7-4466-8cc3-7dc782dd0a30",
+      "name": "Preparar mensaje Telegram"
+    },
+    {
+      "parameters": {
+        "events": [
+          "init"
+        ]
+      },
+      "type": "n8n-nodes-base.n8nTrigger",
+      "typeVersion": 1,
+      "position": [
+        1024,
+        -96
+      ],
+      "id": "65232314-9803-4119-a10c-3b18c23ff557",
+      "name": "Revision al iniciar n8n",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9,
+              "triggerAtMinute": 30
+            },
+            {
+              "triggerAtHour": 11
+            },
+            {
+              "triggerAtHour": 16,
+              "triggerAtMinute": 30
+            },
+            {
+              "triggerAtHour": 18,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        1024,
+        224
+      ],
+      "id": "7f1b13d2-361a-4570-9190-18d6124e0bca",
+      "name": "Revisión diaria - 9:30, 11, 16:30 y 18:30 hs"
+    },
+    {
+      "parameters": {
+        "chatId": "-5396908101",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2496,
+        288
+      ],
+      "id": "b1f5ced8-5cd7-4534-94f3-4c41162c11fa",
+      "name": "Enviar aviso Telegram - Grupo",
+      "webhookId": "1d22eb4b-4c41-492b-9aac-2604ffc1c91d",
+      "credentials": {
+        "telegramApi": {
+          "id": "MHTybspCsTjmWGGv",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "3b8544b7-aad0-485b-b0eb-f8ee74372561",
+              "leftValue": "={{ ['eph','pbi','atp','canasta','sipa','iaraf','ipi','cammesa','dnrpa','ieric','ipc','internet','transferencias_fiscales','srt','srt_historico','ieric_correccion','correccion_transferencias','limpieza_motos','control_base','combustibles','generales'].includes(String($json.fuente || '').trim().toLowerCase()) ? 'SI' : 'NO' }}",
+              "rightValue": "SI",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        864,
+        432
+      ],
+      "id": "67c45338-8a62-46f8-ac75-db6b0c485567",
+      "name": "Es indicador general"
+    }
+  ],
+  "connections": {
+    "Ejecución manual": {
+      "main": [
+        [
+          {
+            "node": "Elegir indicador puntual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ejecutar indicadores complejos": {
+      "main": [
+        [
+          {
+            "node": "Leer Complejos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ejecutar indicadores productivos": {
+      "main": [
+        [
+          {
+            "node": "Leer Productivos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar carga": {
+      "main": [
+        [
+          {
+            "node": "Call 'Actualizar Base del Observatorio'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "carga Productivos": {
+      "main": [
+        [
+          {
+            "node": "Call 'Actualizar Base del Observatorio'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Productivos": {
+      "main": [
+        [
+          {
+            "node": "carga Productivos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "leer General": {
+      "main": [
+        [
+          {
+            "node": "Preparar carga",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Complejos": {
+      "main": [
+        [
+          {
+            "node": "Preparar carga",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Actualizar Base del Observatorio'": {
+      "main": [
+        [
+          {
+            "node": "¿Enviar aviso?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ejecutar indicadores generales": {
+      "main": [
+        [
+          {
+            "node": "leer General",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Elegir indicador puntual": {
+      "main": [
+        [
+          {
+            "node": "Es indicador general",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Es indicador complejo": {
+      "main": [
+        [
+          {
+            "node": "Ejecutar indicadores complejos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ejecutar indicadores productivos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Enviar aviso?": {
+      "main": [
+        [
+          {
+            "node": "Preparar mensaje Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar mensaje Telegram": {
+      "main": [
+        [
+          {
+            "node": "Enviar aviso Telegram - Grupo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revision al iniciar n8n": {
+      "main": [
+        [
+          {
+            "node": "Ejecutar indicadores productivos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Ejecutar indicadores complejos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Ejecutar indicadores generales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Es indicador general": {
+      "main": [
+        [
+          {
+            "node": "Ejecutar indicadores generales",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Es indicador complejo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revisión diaria - 9:30, 11, 16:30 y 18:30 hs": {
+      "main": [
+        [
+          {
+            "node": "Ejecutar indicadores generales",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Ejecutar indicadores complejos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Ejecutar indicadores productivos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "h2ieKNewbtWsRRkJ",
+    "callerPolicy": "workflowsFromSameOwner",
+    "timezone": "America/Argentina/Buenos_Aires"
+  },
+  "active": false,
+  "pinData": {},
+  "meta": {},
+  "tags": []
+}

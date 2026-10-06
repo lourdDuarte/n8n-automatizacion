@@ -1,0 +1,444 @@
+{
+  "id": "Hgo6b3ZFv9xpIzJK",
+  "name": "Actualizar Base del Observatorio",
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "bd60b2c7-4dc7-4cb6-85b3-84b579d87fed",
+              "leftValue": "={{ $json.__solo_aviso === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1184,
+        -160
+      ],
+      "id": "e26c40b9-f2a0-4136-98ad-fd15b69ed722",
+      "name": "¿Es solo aviso?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const entradaOriginal =\n  $('Entrada Observatorio').first().json || {};\n\nconst salida = JSON.parse(\n  JSON.stringify(entradaOriginal)\n);\n\nconst aviso = JSON.parse(\n  JSON.stringify(salida.__aviso || {})\n);\n\ntry {\n  const cargaConfirmada =\n    $('Resolver periodo encabezados').first().json || {};\n\n  const camposCargados = Object.keys(cargaConfirmada)\n    .filter(campo =>\n      campo !== 'PERIODO' &&\n      !campo.startsWith('__')\n    );\n\n  const esCargaICC = camposCargados.some(\n    campo =>\n      String(campo)\n        .toLowerCase()\n        .includes('confianza del consumidor')\n  );\n\n  if (\n    esCargaICC &&\n    Array.isArray(aviso.cargas)\n  ) {\n    for (const carga of aviso.cargas) {\n      const nombre = String(\n        carga.nombre || carga.fuente || ''\n      ).toLowerCase();\n\n      if (\n        nombre.includes('icc') ||\n        nombre.includes('confianza del consumidor')\n      ) {\n        /*\n         * Seis datos originales más el acumulado\n         * calculado en Resolver periodo encabezados.\n         */\n        carga.columnas_enviadas =\n          camposCargados.length;\n\n        carga.columnas_esperadas = 7;\n\n        carga.celdas_actualizadas =\n          camposCargados.length;\n\n        carga.columnas_faltantes =\n          camposCargados.length < 7\n            ? [`Faltan ${7 - camposCargados.length} campos`]\n            : [];\n      }\n    }\n  }\n} catch (error) {\n  /*\n   * Este nodo también recibe las ramas de aviso\n   * y de indicadores productivos. En esas ramas\n   * Resolver periodo encabezados no fue ejecutado.\n   */\n}\n\nsalida.__aviso = aviso;\nsalida.__carga_correcta = true;\n\nreturn [\n  {\n    json: salida\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -768,
+        -176
+      ],
+      "id": "0914fdfa-5163-4d19-8550-0d2bec2c0a2c",
+      "name": "Devolver resultado"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "481d38cc-d3a7-4734-965b-e8a85fa0002d",
+              "leftValue": "={{ !!$json[\"__periodo\"] }}",
+              "rightValue": "SI",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": "={{ false }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1200,
+        -688
+      ],
+      "id": "089a790a-14f9-41ce-b1cf-e43a53b2f696",
+      "name": "Es productivo"
+    },
+    {
+      "parameters": {
+        "jsCode": "const carga = $('Es productivo').first().json;\nconst filas = $input.all().map(item => item.json);\n\nif (!carga.__periodo) {\n  throw new Error('No se recibió el período productivo');\n}\n\nconst partes = String(carga.__periodo)\n  .slice(0, 10)\n  .split('-');\n\nconst anioBuscado = Number(partes[0]);\nconst mesNumero = Number(partes[1]);\n\nconst mesesLargos = [\n  'ENERO', 'FEBRERO', 'MARZO', 'ABRIL',\n  'MAYO', 'JUNIO', 'JULIO', 'AGOSTO',\n  'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'\n];\n\nconst mesesCortos = [\n  'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',\n  'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'\n];\n\nconst mesBuscado = mesesLargos[mesNumero - 1];\nconst periodoPecuario =\n  `${mesesCortos[mesNumero - 1]} ${String(anioBuscado).slice(-2)}`;\n\nif (!Number.isInteger(anioBuscado) || !mesBuscado) {\n  throw new Error(`Período inválido: ${carga.__periodo}`);\n}\n\nconst normalizar = valor => String(valor ?? '')\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .replace(/SEPT/g, 'SEP')\n  .replace(/[-_/]+/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .toUpperCase();\n\nconst esPecuaria = Object.keys(carga).some(\n  campo => normalizar(campo) === 'PERIODO'\n);\n\nlet filaEncontrada = null;\n\nif (esPecuaria) {\n  // Pecuaria: busca exclusivamente su columna “Periodo”.\n  for (const fila of filas) {\n    const camposPeriodo = Object.entries(fila)\n      .filter(([campo]) =>\n        normalizar(campo) === 'PERIODO' ||\n        normalizar(campo).startsWith('PERIODO ')\n      )\n      .map(([, valor]) => normalizar(valor));\n\n    if (camposPeriodo.includes(normalizar(periodoPecuario))) {\n      filaEncontrada = fila;\n      break;\n    }\n  }\n} else {\n  // Comercialización: conserva su estructura Año/Mes en A:B.\n  let anioActual = null;\n\n  for (const fila of filas) {\n    const valor = normalizar(\n      fila['Año/Mes'] ??\n      fila['Año/Mes_2'] ??\n      ''\n    );\n\n    if (/^\\d{4}$/.test(valor)) {\n      anioActual = Number(valor);\n      continue;\n    }\n\n    if (\n      anioActual === anioBuscado &&\n      valor === mesBuscado\n    ) {\n      filaEncontrada = fila;\n      break;\n    }\n  }\n}\n\nif (!filaEncontrada) {\n  throw new Error(\n    esPecuaria\n      ? `No se encontró ${periodoPecuario} en el bloque pecuario`\n      : `No se encontró ${mesBuscado} de ${anioBuscado} en comercialización`\n  );\n}\n\nconst filaReal = Number(filaEncontrada.row_number) + 1;\nconst filaLocal = Number(carga.__fila_local);\n\nif (!Number.isInteger(filaReal)) {\n  throw new Error(\n    'Google Sheets no entregó un row_number válido'\n  );\n}\n\nconst diferenciaFilas =\n  Number.isInteger(filaLocal)\n    ? filaReal - filaLocal\n    : 0;\nconst encabezadosDisponibles = new Set(\n  filas.flatMap(fila => Object.keys(fila))\n);\n\nconst camposDesconocidos = Object.keys(carga).filter(\n  campo =>\n    !campo.startsWith('__') &&\n    campo !== 'row_number' &&\n    !encabezadosDisponibles.has(campo)\n);\n\nif (camposDesconocidos.length) {\n  throw new Error(\n    `Campos productivos sin encabezado en el Sheet: ${camposDesconocidos.join(', ')}`\n  );\n}\nconst resultado = {};\n\nfor (const [campo, valor] of Object.entries(carga)) {\n  if (campo.startsWith('__')) continue;\n\n  if (\n    typeof valor === 'string' &&\n    valor.startsWith('=') &&\n    diferenciaFilas !== 0\n  ) {\n    resultado[campo] = valor.replace(\n      /(\\$?[A-Z]{1,3})(\\$?)(\\d+)/g,\n      (coincidencia, columna, absoluto, numero) => {\n        const filaNueva =\n          Number(numero) + diferenciaFilas;\n\n        return `${columna}${absoluto}${filaNueva}`;\n      }\n    );\n  } else {\n    resultado[campo] = valor;\n  }\n}\n\nresultado.row_number = filaReal;\n\nreturn [{ json: resultado }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -816,
+        -704
+      ],
+      "id": "7dd8a5a4-cfd5-4c32-8c76-eecbeb83deb2",
+      "name": "Resolver Periodo Productivo"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1cVd_KBbtjMN8vUHlUks1IKwPf0c4Oq0RcYn4B5N5PkA/edit",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1954947101,
+          "mode": "list",
+          "cachedResultName": "BASE DE DATOS - Indicadores Procutivos",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1cVd_KBbtjMN8vUHlUks1IKwPf0c4Oq0RcYn4B5N5PkA/edit#gid=1954947101"
+        },
+        "options": {
+          "dataLocationOnSheet": {
+            "values": {
+              "rangeDefinition": "specifyRangeA1",
+              "range": "A2:AS"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1008,
+        -704
+      ],
+      "id": "85334a7a-dc66-4bde-8699-c76086568c9f",
+      "name": "Leer Productivo",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2LcdIqKh3LJwv9OY",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1cVd_KBbtjMN8vUHlUks1IKwPf0c4Oq0RcYn4B5N5PkA/edit",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1954947101,
+          "mode": "list",
+          "cachedResultName": "BASE DE DATOS - Indicadores Procutivos",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1cVd_KBbtjMN8vUHlUks1IKwPf0c4Oq0RcYn4B5N5PkA/edit#gid=1954947101"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "locationDefine": {
+            "values": {
+              "headerRow": 3,
+              "firstDataRow": 4
+            }
+          },
+          "handlingExtraData": "ignoreIt"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -640,
+        -704
+      ],
+      "id": "d50b83f2-fe15-4ad8-89fa-3a8945ea89a7",
+      "name": "Actualizar Productivo",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2LcdIqKh3LJwv9OY",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1cVd_KBbtjMN8vUHlUks1IKwPf0c4Oq0RcYn4B5N5PkA/edit",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "BASE DE DATOS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1cVd_KBbtjMN8vUHlUks1IKwPf0c4Oq0RcYn4B5N5PkA/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "PERIODO"
+          ],
+          "schema": [
+            {
+              "id": "PERIODO",
+              "displayName": "PERIODO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "handlingExtraData": "error"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -608,
+        -480
+      ],
+      "id": "f800c2c4-4cf5-4368-893b-adf738e0b52f",
+      "name": "Actualizar Base",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2LcdIqKh3LJwv9OY",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1360,
+        -144
+      ],
+      "id": "2b29136c-0f49-4ef3-9cae-82ca67cc5f9c",
+      "name": "Entrada Observatorio"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1cVd_KBbtjMN8vUHlUks1IKwPf0c4Oq0RcYn4B5N5PkA",
+          "mode": "list",
+          "cachedResultName": "BASE DE DATOS INDICADORES PROPIOS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1cVd_KBbtjMN8vUHlUks1IKwPf0c4Oq0RcYn4B5N5PkA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "BASE DE DATOS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1cVd_KBbtjMN8vUHlUks1IKwPf0c4Oq0RcYn4B5N5PkA/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1008,
+        -480
+      ],
+      "id": "555082b0-855d-4a78-a383-cee85b3a5768",
+      "name": "Leer Base",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2LcdIqKh3LJwv9OY",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const carga = $('Entrada Observatorio').first().json;\nconst filas = $input.all().map(item => item.json);\n\nconst normalizar = valor => String(valor ?? '')\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .replace(/[\\r\\n\\t]+/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .toLowerCase();\n\nconst claveFecha = valor => {\n  if (valor === null || valor === undefined || valor === '') {\n    return null;\n  }\n\n  if (typeof valor === 'number') {\n    const fecha = new Date(\n      Date.UTC(1899, 11, 30) + Math.round(valor * 86400000)\n    );\n    return fecha.toISOString().slice(0, 10);\n  }\n\n  const original = String(valor).trim();\n  const texto = original\n    .normalize('NFD')\n    .replace(/[\\u0300-\\u036f]/g, '')\n    .trim()\n    .toLowerCase();\n\n  let coincidencia = texto.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);\n  if (coincidencia) {\n    return `${coincidencia[1]}-${String(coincidencia[2]).padStart(2, '0')}-${String(coincidencia[3]).padStart(2, '0')}`;\n  }\n\n  coincidencia = texto.match(/^(\\d{1,2})[\\/-](\\d{1,2})[\\/-](\\d{4})$/);\n  if (coincidencia) {\n    return `${coincidencia[3]}-${String(coincidencia[2]).padStart(2, '0')}-${String(coincidencia[1]).padStart(2, '0')}`;\n  }\n\n  const meses = {\n    ene: 1, enero: 1, feb: 2, febrero: 2,\n    mar: 3, marzo: 3, abr: 4, abril: 4,\n    may: 5, mayo: 5, jun: 6, junio: 6,\n    jul: 7, julio: 7, ago: 8, agosto: 8,\n    sep: 9, sept: 9, septiembre: 9,\n    oct: 10, octubre: 10, nov: 11, noviembre: 11,\n    dic: 12, diciembre: 12\n  };\n\n  coincidencia = texto.match(/^([a-z]+)[\\s\\-/]+(\\d{2}|\\d{4})$/);\n  if (coincidencia) {\n    const mes = meses[coincidencia[1]];\n    let anio = Number(coincidencia[2]);\n    if (anio < 100) anio += 2000;\n    if (mes) return `${anio}-${String(mes).padStart(2, '0')}-01`;\n  }\n\n  const fecha = new Date(original);\n  return Number.isNaN(fecha.getTime())\n    ? null\n    : fecha.toISOString().slice(0, 10);\n};\n\nconst convertirNumero = valor => {\n  if (typeof valor === 'number') {\n    return Number.isFinite(valor) ? valor : null;\n  }\n\n  let texto = String(valor ?? '')\n    .trim()\n    .replace('%', '')\n    .replace(/\\s+/g, '');\n\n  if (!texto) return null;\n\n  if (texto.includes(',') && texto.includes('.')) {\n    texto = texto.replace(/\\./g, '').replace(',', '.');\n  } else {\n    texto = texto.replace(',', '.');\n  }\n\n  const resultado = Number(texto);\n  return Number.isFinite(resultado) ? resultado : null;\n};\n\nconst redondear = valor =>\n  Math.round((valor + Number.EPSILON) * 100) / 100;\n\nif (!filas.length) {\n  throw new Error('Leer Base no devolvió filas de BASE DE DATOS');\n}\n\nconst encabezados = [\n  ...new Set(filas.flatMap(fila => Object.keys(fila)))\n].filter(encabezado => encabezado !== 'row_number');\n\nconst mapaEncabezados = new Map(\n  encabezados.map(encabezado => [\n    normalizar(encabezado),\n    encabezado\n  ])\n);\n\nconst encabezadoPeriodo = mapaEncabezados.get(normalizar('PERIODO'));\nif (!encabezadoPeriodo) {\n  throw new Error('No se encontró el encabezado PERIODO en BASE DE DATOS');\n}\n\nconst periodoObjetivo = claveFecha(carga.PERIODO);\nif (!periodoObjetivo) {\n  throw new Error(`Período inválido recibido: ${carga.PERIODO}`);\n}\n\nconst filaActual = filas.find(\n  fila => claveFecha(fila[encabezadoPeriodo]) === periodoObjetivo\n);\n\nif (!filaActual) {\n  const ejemplos = filas.slice(0, 5)\n    .map(fila => String(fila[encabezadoPeriodo] ?? ''))\n    .join(', ');\n  throw new Error(\n    `No se encontró el período ${periodoObjetivo} en BASE DE DATOS. Ejemplos leídos: ${ejemplos}`\n  );\n}\n\nconst equivalencias = new Map([\n  [\n    normalizar('Índice de Confianza del Consumidor Interior'),\n    normalizar('Indice de Confianza del Consumidor por Regiones: Interior')\n  ]\n]);\n\nconst resultado = {};\nconst omitidos = [];\n\nfor (const [campo, valor] of Object.entries(carga)) {\n  if (campo.startsWith('__')) continue;\n  if (normalizar(campo) === normalizar('PERIODO')) continue;\n\n  const campoBuscado =\n    equivalencias.get(normalizar(campo)) || normalizar(campo);\n\n  const coincidencias = encabezados.filter(\n    encabezado => normalizar(encabezado) === campoBuscado\n  );\n\n  if (coincidencias.length !== 1) {\n    omitidos.push(`${campo} (${coincidencias.length} coincidencias)`);\n    continue;\n  }\n\n  const encabezadoReal = coincidencias[0];\n  const existente = filaActual[encabezadoReal];\n  const recibido = valor;\n  const formula =\n    typeof recibido === 'string' && recibido.startsWith('=');\n\n  // Leer Base devuelve el valor calculado de una fórmula.\n  // No reemplazar una fórmula existente.\n  if (\n    formula &&\n    existente !== null &&\n    existente !== undefined &&\n    existente !== ''\n  ) {\n    continue;\n  }\n\n  const mismoTexto =\n    String(existente ?? '').trim() === String(recibido ?? '').trim();\n  const numeroExistente = convertirNumero(existente);\n  const numeroRecibido = convertirNumero(recibido);\n  const mismoNumero =\n    numeroExistente !== null &&\n    numeroRecibido !== null &&\n    Math.abs(numeroExistente - numeroRecibido) < 1e-9;\n\n  if (mismoTexto || (!formula && mismoNumero)) continue;\n  resultado[encabezadoReal] = valor;\n}\n\n/*\n * DNRPA: los ocho datos originales corresponden a patentamientos\n * y transferencias de autos y motos, Formosa y Nación.\n * Las fórmulas existentes del Sheet se conservan.\n */\nconst gruposDnrpa = [\n  [\n    'Patentamiento de automóviles F',\n    'Patentamiento de automóviles - Acumulado F',\n    'Patentamiento de automóviles - Var % intermensual F',\n    'Patentamiento de automóviles - Var % interanual F'\n  ],\n  [\n    'Transferencias de automoviles F',\n    'Transferencias de automoviles acumulada F',\n    'Transferencias de automóviles - Var % intermensual F',\n    'Transferencias de automóviles - Var % interanual F'\n  ],\n  [\n    'Patentamiento de automóviles N',\n    'Patentamiento de automóviles - Acumulado N',\n    'Patentamiento de automóviles - Var % intermensual N',\n    'Patentamiento de automóviles - Var % interanual N'\n  ],\n  [\n    'Transferencias de automoviles N',\n    'Transferencias de automoviles acumulada N',\n    'Transferencias de automóviles - Var % intermensual N',\n    'Transferencias de automóviles - Var % interanual N'\n  ],\n  [\n    'Patentamiento de Motos F',\n    'Patentamiento de Motos - Acumulado F',\n    'Patentamiento de Motos- Var % intermensual F',\n    'Patentamiento de Motos- Var % interanual F'\n  ],\n  [\n    'Transferencias de Motos F',\n    'Transferencias de Motos - Acumulado F',\n    'Transferencias de Motos- Var % intermensual F',\n    'Trasnferencias de Motos- Var % interanual F'\n  ],\n  [\n    'Patentamiento de Motos N',\n    'Patentamiento de Motos - Acumulado N',\n    'Patentamiento de Motos- Var % intermensual N',\n    'Trasnferencias de Motos- Var % interanual N'\n  ],\n  [\n    'Transferencias de Motos N',\n    'Transferencias de Motos - Acumulado N',\n    'Transferencias de Motos- Var % intermensual N',\n    'Trasnferencias de Motos- Var % interanual N'\n  ]\n];\n\nconst titulosDnrpa = gruposDnrpa.map(\n  grupo => mapaEncabezados.get(normalizar(grupo[0]))\n);\n\nconst contieneDnrpa = titulosDnrpa.some(\n  titulo =>\n    titulo &&\n    Object.prototype.hasOwnProperty.call(carga, titulo)\n);\n\nif (contieneDnrpa) {\n  if (titulosDnrpa.some(\n    titulo =>\n      !titulo ||\n      !Object.prototype.hasOwnProperty.call(carga, titulo)\n  )) {\n    throw new Error(\n      'DNRPA: faltan datos originales de alguna de las cuatro consultas; no se carga parcialmente'\n    );\n  }\n\n  for (const grupo of gruposDnrpa) {\n    const titulosReales = grupo.map(titulo => {\n      const real = mapaEncabezados.get(normalizar(titulo));\n      if (!real) throw new Error(`DNRPA: falta encabezado ${titulo}`);\n      return real;\n    });\n\n    const posiciones = titulosReales.map(\n      titulo => encabezados.indexOf(titulo)\n    );\n\n    if (posiciones.some(\n      (pos, i) => pos !== posiciones[0] + i\n    )) {\n      throw new Error(\n        `DNRPA: las cuatro columnas de ${grupo[0]} no están contiguas`\n      );\n    }\n\n    const original = convertirNumero(carga[titulosReales[0]]);\n    if (original === null || original <= 0) {\n      throw new Error(\n        `DNRPA: dato original inválido en ${titulosReales[0]}`\n      );\n    }\n\n    const cambiaOriginal = Object.prototype.hasOwnProperty.call(\n      resultado,\n      titulosReales[0]\n    );\n    if (cambiaOriginal) resultado[titulosReales[0]] = original;\n\n    const actual = 'INDIRECT(ADDRESS(ROW(),COLUMN()-1))';\n    const anteriorAcumulado = 'INDIRECT(ADDRESS(ROW()-1,COLUMN()))';\n    const mensual = 'INDIRECT(ADDRESS(ROW(),COLUMN()-2))';\n    const previoMensual = 'INDIRECT(ADDRESS(ROW()-1,COLUMN()-2))';\n    const interanual = 'INDIRECT(ADDRESS(ROW(),COLUMN()-3))';\n    const previoInteranual = 'INDIRECT(ADDRESS(ROW()-12,COLUMN()-3))';\n    const enero = Number(periodoObjetivo.slice(5, 7)) === 1;\n\n    const formulas = [\n      enero\n        ? `=${actual}`\n        : `=${anteriorAcumulado}+${actual}`,\n      `=IFERROR(${mensual}/${previoMensual}*100-100,\"\")`,\n      `=IFERROR(${interanual}/${previoInteranual}*100-100,\"\")`\n    ];\n\n    for (let i = 1; i < 4; i++) {\n      const titulo = titulosReales[i];\n      const existente = filaActual[titulo];\n\n      // La fórmula existente se recalcula al cambiar el dato original.\n      // Solo completar las fórmulas que falten.\n      if (\n        existente === null ||\n        existente === undefined ||\n        existente === ''\n      ) {\n        resultado[titulo] = formulas[i - 1];\n      }\n    }\n  }\n}\n\n/* Cálculo del acumulado del ICC Interior. */\nconst encabezadoMensual = mapaEncabezados.get(\n  normalizar(\n    'Indice de Confianza del Consumidor Interior Variación respecto al mes anterior'\n  )\n);\n\nconst encabezadoAcumulado = mapaEncabezados.get(\n  normalizar(\n    'Indice de Confianza del Consumidor Interior Acumulado del año'\n  )\n);\n\nconst esICC =\n  encabezadoMensual &&\n  Object.prototype.hasOwnProperty.call(\n    resultado,\n    encabezadoMensual\n  );\n\nif (esICC) {\n  if (!encabezadoAcumulado) {\n    throw new Error(\n      'No se encontró la columna del acumulado del ICC Interior'\n    );\n  }\n\n  const variacionMensual = convertirNumero(\n    resultado[encabezadoMensual]\n  );\n\n  if (variacionMensual === null) {\n    throw new Error(\n      'No se pudo interpretar la variación mensual del ICC Interior'\n    );\n  }\n\n  const fechaActual = new Date(`${periodoObjetivo}T00:00:00Z`);\n\n  if (fechaActual.getUTCMonth() === 0) {\n    resultado[encabezadoAcumulado] = redondear(variacionMensual);\n  } else {\n    fechaActual.setUTCMonth(fechaActual.getUTCMonth() - 1);\n    const periodoAnterior = fechaActual.toISOString().slice(0, 10);\n\n    const filaAnterior = filas.find(\n      fila => claveFecha(fila[encabezadoPeriodo]) === periodoAnterior\n    );\n\n    if (!filaAnterior) {\n      throw new Error(\n        `No se encontró el período anterior ${periodoAnterior} para calcular el acumulado del ICC`\n      );\n    }\n\n    const acumuladoAnterior = convertirNumero(\n      filaAnterior[encabezadoAcumulado]\n    );\n\n    if (acumuladoAnterior === null) {\n      throw new Error(\n        `El acumulado anterior del ICC está vacío en ${periodoAnterior}`\n      );\n    }\n\n    resultado[encabezadoAcumulado] = redondear(\n      (\n        (1 + acumuladoAnterior / 100) *\n        (1 + variacionMensual / 100) -\n        1\n      ) * 100\n    );\n  }\n}\n\nif (omitidos.length) {\n  console.warn(\n    `Período ${periodoObjetivo}: encabezados omitidos: ${omitidos.join('; ')}`\n  );\n}\n\nif (!Object.keys(resultado).length) {\n  console.log(\n    `Período ${periodoObjetivo}: sin celdas válidas nuevas para escribir`\n  );\n  return [];\n}\n\nresultado[encabezadoPeriodo] = filaActual[encabezadoPeriodo];\n\nreturn [{ json: resultado }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -800,
+        -480
+      ],
+      "id": "60f510d1-87ae-4860-847c-51a0fb352406",
+      "name": "Resolver periodo encabezados"
+    }
+  ],
+  "connections": {
+    "¿Es solo aviso?": {
+      "main": [
+        [
+          {
+            "node": "Devolver resultado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Es productivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Es productivo": {
+      "main": [
+        [
+          {
+            "node": "Leer Productivo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Leer Base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolver Periodo Productivo": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Productivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Productivo": {
+      "main": [
+        [
+          {
+            "node": "Resolver Periodo Productivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualizar Productivo": {
+      "main": [
+        [
+          {
+            "node": "Devolver resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualizar Base": {
+      "main": [
+        [
+          {
+            "node": "Devolver resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrada Observatorio": {
+      "main": [
+        [
+          {
+            "node": "¿Es solo aviso?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Base": {
+      "main": [
+        [
+          {
+            "node": "Resolver periodo encabezados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolver periodo encabezados": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "h2ieKNewbtWsRRkJ",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "active": false,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

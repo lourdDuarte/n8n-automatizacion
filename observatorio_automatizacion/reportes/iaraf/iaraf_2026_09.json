@@ -1,0 +1,27 @@
+{
+  "periodo": "2026-09",
+  "pdf": "C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\fuentes\\iaraf\\iaraf_transferencias_2026_09.pdf",
+  "formosa": {
+    "monto_millones": 243758.0,
+    "variacion_nominal_pct": 39.6,
+    "variacion_real_pct": 4.7,
+    "acumulado_anual_millones": 1988311.0
+  },
+  "nacion": {
+    "monto_millones": 7077919.0,
+    "variacion_nominal_pct": 39.0,
+    "variacion_real_pct": 4.3,
+    "acumulado_anual_millones": 58092792.0
+  },
+  "clasificacion": {
+    "monto_millones": "FUENTE_IARAF",
+    "variacion_nominal_pct": "FUENTE_IARAF",
+    "variacion_real_pct": "FUENTE_IARAF",
+    "acumulado_anual_millones": "FUENTE_IARAF"
+  },
+  "control": {
+    "estado": "OK",
+    "faltantes": []
+  },
+  "extraido_en": "2026-10-05T11:19:06"
+}

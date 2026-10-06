@@ -1,0 +1,94 @@
+{
+  "fuente": "pbi",
+  "anio": 2026,
+  "trimestre": 2,
+  "periodo_estadistico": "2026-T2",
+  "periodo": "2026-06-01",
+  "url_informe": "https://www.indec.gob.ar/uploads/informesdeprensa/pib_09_26065D6A3612.pdf",
+  "estado_publicacion": "PUBLICADO",
+  "valores": {
+    "PBI Var. % desestacionalizada respecto del trimestre anterior.": -0.6,
+    "PBI Var. % interanual. Igual trimestre del año anterior.": 2.0,
+    "PBI Acumulado del año respecto a igual acumulado del año anterior.": 2.2,
+    "PBI Consumo Privado desestacionalizado N": -2.4,
+    "PBI Consumo Público desestacionalizado N": -2.3,
+    "PBI Inversión desestacionalizado N": -0.8,
+    "PBI Exportaciones desestacionalizado N": 2.5,
+    "PBI Importaciones desestacionalizado N": -3.5,
+    "PBI Consumo Privado Interanual N": 0.4,
+    "PBI Consumo Público Interanual N": -4.1,
+    "PBI Inversión Interanual N": -11.1,
+    "PBI Exportaciones Interanual N": 13.7,
+    "PBI Importaciones Interanual N": -8.6
+  },
+  "validaciones": {
+    "campos": 13,
+    "unidad": "variación porcentual",
+    "acumulado": "valor publicado en la tabla oficial de variaciones del PIB; conciliado con los Cuadros 1 y 2"
+  },
+  "actualizacion": {
+    "archivo_excel": "C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\base\\BASE DE DATOS INDICADORES PROPIOS.xlsx",
+    "hoja": "BASE DE DATOS",
+    "fila_localizada": 91,
+    "celdas_actualizadas": 0,
+    "hubo_cambios": false,
+    "cambios": [],
+    "detalle_completo": [
+      {
+        "titulo": "PBI Var. % desestacionalizada respecto del trimestre anterior.",
+        "valor": -0.6
+      },
+      {
+        "titulo": "PBI Var. % interanual. Igual trimestre del año anterior.",
+        "valor": 2.0
+      },
+      {
+        "titulo": "PBI Acumulado del año respecto a igual acumulado del año anterior.",
+        "valor": 2.2
+      },
+      {
+        "titulo": "PBI Consumo Privado desestacionalizado N",
+        "valor": -2.4
+      },
+      {
+        "titulo": "PBI Consumo Público desestacionalizado N",
+        "valor": -2.3
+      },
+      {
+        "titulo": "PBI Inversión desestacionalizado N",
+        "valor": -0.8
+      },
+      {
+        "titulo": "PBI Exportaciones desestacionalizado N",
+        "valor": 2.5
+      },
+      {
+        "titulo": "PBI Importaciones desestacionalizado N",
+        "valor": -3.5
+      },
+      {
+        "titulo": "PBI Consumo Privado Interanual N",
+        "valor": 0.4
+      },
+      {
+        "titulo": "PBI Consumo Público Interanual N",
+        "valor": -4.1
+      },
+      {
+        "titulo": "PBI Inversión Interanual N",
+        "valor": -11.1
+      },
+      {
+        "titulo": "PBI Exportaciones Interanual N",
+        "valor": 13.7
+      },
+      {
+        "titulo": "PBI Importaciones Interanual N",
+        "valor": -8.6
+      }
+    ],
+    "formulas_conservadas": [],
+    "respaldo": null
+  },
+  "reporte": "C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\scripts\\reportes\\pbi\\pbi_2026_T2.json"
+}

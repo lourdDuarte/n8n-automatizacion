@@ -1,0 +1,189 @@
+{
+  "fuente": "eph",
+  "anio": 2026,
+  "trimestre": 2,
+  "periodo_estadistico": "2026-T2",
+  "periodo": "2026-06-01",
+  "limpiar_periodo_erroneo": "2026-09-01",
+  "url_informe": "https://www.indec.gob.ar/uploads/informesdeprensa/mercado_trabajo_eph_2trim26433FCBC5A8.pdf",
+  "estado_publicacion": "PUBLICADO",
+  "valores": {
+    "Tasa de empleo (ciudad de Formosa) F": 42.3,
+    "tasa de desocupación (ciudad de Formosa) F": 4.8,
+    "Tasa de actividad (ciudad de Formosa) F": 44.4,
+    "Tasa de subocupación (ciudad de Formosa) F": 3.5,
+    "PEA (ciudad de Formosa -en miles) F": 119.0,
+    "Población ocupada (ciudad de Formosa- en miles) F": 113.0,
+    "Población desocupada (ciudad de Formosa- En miles) F": 6.0,
+    "Población subocupada (ciudad de Formosa - en miles) F": 4.0,
+    "Tasa de empleo (Región NEA)": 42.2,
+    "tasa de desocupación (Región NEA)": 7.0,
+    "Tasa de actividad (Region NEA)": 45.4,
+    "Tasa de subocupación (Region NEA)": 5.9,
+    "PEA (Region NEA -en miles)": 677.0,
+    "Población ocupada (Region NEA- en miles)": 630.0,
+    "Población desocupada (Region NEA- En miles)": 47.0,
+    "Población subocupada (Region NEA - en miles)": 40.0,
+    "Tasa de empleo N": 45.0,
+    "tasa de desocupación N": 7.9,
+    "Tasa de actividad N": 48.9,
+    "Tasa de subocupación N": 11.5,
+    "PEA (en miles) N": 14733.0,
+    "Población ocupada (en miles) N": 13569.0,
+    "Población desocupada (en miles) N": 1164.0,
+    "Población subocupada (en miles) N": 1687.0
+  },
+  "evidencias": {
+    "('N', 'actividad', 'tasa')": {
+      "pagina": 18,
+      "cuadro": "3.1",
+      "etiqueta": "total 31 aglomerados urbanos",
+      "unidad": "porcentaje"
+    },
+    "('N', 'empleo', 'tasa')": {
+      "pagina": 18,
+      "cuadro": "3.1",
+      "etiqueta": "total 31 aglomerados urbanos",
+      "unidad": "porcentaje"
+    },
+    "('N', 'desocupación', 'tasa')": {
+      "pagina": 18,
+      "cuadro": "3.1",
+      "etiqueta": "total 31 aglomerados urbanos",
+      "unidad": "porcentaje"
+    },
+    "('N', 'subocupación', 'tasa')": {
+      "pagina": 18,
+      "cuadro": "3.1",
+      "etiqueta": "total 31 aglomerados urbanos",
+      "unidad": "porcentaje"
+    },
+    "('NEA', 'actividad', 'tasa')": {
+      "pagina": 18,
+      "cuadro": "3.1",
+      "etiqueta": "noreste",
+      "unidad": "porcentaje"
+    },
+    "('NEA', 'empleo', 'tasa')": {
+      "pagina": 18,
+      "cuadro": "3.1",
+      "etiqueta": "noreste",
+      "unidad": "porcentaje"
+    },
+    "('NEA', 'desocupación', 'tasa')": {
+      "pagina": 18,
+      "cuadro": "3.1",
+      "etiqueta": "noreste",
+      "unidad": "porcentaje"
+    },
+    "('NEA', 'subocupación', 'tasa')": {
+      "pagina": 18,
+      "cuadro": "3.1",
+      "etiqueta": "noreste",
+      "unidad": "porcentaje"
+    },
+    "('Formosa', 'actividad', 'tasa')": {
+      "pagina": 18,
+      "cuadro": "3.1",
+      "etiqueta": "formosa",
+      "unidad": "porcentaje"
+    },
+    "('Formosa', 'empleo', 'tasa')": {
+      "pagina": 18,
+      "cuadro": "3.1",
+      "etiqueta": "formosa",
+      "unidad": "porcentaje"
+    },
+    "('Formosa', 'desocupación', 'tasa')": {
+      "pagina": 18,
+      "cuadro": "3.1",
+      "etiqueta": "formosa",
+      "unidad": "porcentaje"
+    },
+    "('Formosa', 'subocupación', 'tasa')": {
+      "pagina": 18,
+      "cuadro": "3.1",
+      "etiqueta": "formosa",
+      "unidad": "porcentaje"
+    },
+    "('N', 'PEA', 'poblacion')": {
+      "pagina": 19,
+      "cuadro": "3.2",
+      "etiqueta": "total 31 aglomerados urbanos",
+      "unidad": "miles de personas"
+    },
+    "('N', 'ocupada', 'poblacion')": {
+      "pagina": 19,
+      "cuadro": "3.2",
+      "etiqueta": "total 31 aglomerados urbanos",
+      "unidad": "miles de personas"
+    },
+    "('N', 'desocupada', 'poblacion')": {
+      "pagina": 19,
+      "cuadro": "3.2",
+      "etiqueta": "total 31 aglomerados urbanos",
+      "unidad": "miles de personas"
+    },
+    "('N', 'subocupada', 'poblacion')": {
+      "pagina": 19,
+      "cuadro": "3.2",
+      "etiqueta": "total 31 aglomerados urbanos",
+      "unidad": "miles de personas"
+    },
+    "('NEA', 'PEA', 'poblacion')": {
+      "pagina": 19,
+      "cuadro": "3.2",
+      "etiqueta": "noreste",
+      "unidad": "miles de personas"
+    },
+    "('NEA', 'ocupada', 'poblacion')": {
+      "pagina": 19,
+      "cuadro": "3.2",
+      "etiqueta": "noreste",
+      "unidad": "miles de personas"
+    },
+    "('NEA', 'desocupada', 'poblacion')": {
+      "pagina": 19,
+      "cuadro": "3.2",
+      "etiqueta": "noreste",
+      "unidad": "miles de personas"
+    },
+    "('NEA', 'subocupada', 'poblacion')": {
+      "pagina": 19,
+      "cuadro": "3.2",
+      "etiqueta": "noreste",
+      "unidad": "miles de personas"
+    },
+    "('Formosa', 'PEA', 'poblacion')": {
+      "pagina": 19,
+      "cuadro": "3.2",
+      "etiqueta": "formosa",
+      "unidad": "miles de personas"
+    },
+    "('Formosa', 'ocupada', 'poblacion')": {
+      "pagina": 19,
+      "cuadro": "3.2",
+      "etiqueta": "formosa",
+      "unidad": "miles de personas"
+    },
+    "('Formosa', 'desocupada', 'poblacion')": {
+      "pagina": 19,
+      "cuadro": "3.2",
+      "etiqueta": "formosa",
+      "unidad": "miles de personas"
+    },
+    "('Formosa', 'subocupada', 'poblacion')": {
+      "pagina": 19,
+      "cuadro": "3.2",
+      "etiqueta": "formosa",
+      "unidad": "miles de personas"
+    }
+  },
+  "validaciones": {
+    "campos_originales": 24,
+    "calculos": 24,
+    "cobertura": "Formosa, región NEA y total 31 aglomerados urbanos",
+    "unidad_poblaciones": "miles de personas"
+  },
+  "reporte": "C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\scripts\\reportes\\eph\\eph_2026_T2.json"
+}

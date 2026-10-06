@@ -1,0 +1,24 @@
+{
+  "fuente": "transferencias_fiscales",
+  "nombre": "Transferencias automaticas - IARAF",
+  "estado": "OK",
+  "periodo": "2026-09-01",
+  "consultado_en": "2026-10-05T11:07:34.427107-03:00",
+  "url_informe": "https://www.iaraf.org/index.php/13-areas-de-estudio/area-fiscal/755-informe-economico-30-09-26",
+  "url_pdf": "https://drive.google.com/uc?export=download&id=1I6oUWCbM2EM4MbYmqOFA3AAZTGQ7P00Y",
+  "titulo_informe": "\n\t\t\tInforme Coparticipación Nacional de septiembre 2026: Transferencias automáticas a provincias en septiembre: habrían crecido un 4,3% real interanual En el acumulado del año habrían caído 0,6%\t\t",
+  "sha256_pdf": "47d9949009501fcafd3e1b0c6a735895eb9934a394ad58409e82be29dd74dec8",
+  "valores": {
+    "Transferencias automáticas por coparticipación, leyes compl. y compensac. en millones $ F": 243758.0,
+    "Transferencias automáticas por coparticipación, leyes compl. y compensac. Var% Anual Nominal F": 39.6,
+    "Transferencias automáticas por coparticipación, leyes complementarias y compensaciones Var% Anual Real F": 4.7,
+    "Transferencias automáticas por coparticipación, leyes complementarias y compensaciones Acumulado anual. En millones de $ F": 1988311.0,
+    "Transferencias automáticas por coparticipación, leyes compl. y compensac. en millones $ N": 7077919.0,
+    "Transferencias automáticas por coparticipación, leyes compl. y compensac. Var% Anual Nominal N": 39.0,
+    "Transferencias automáticas por coparticipación, leyes compl. y compensac. Var% Anual Real N": 4.3,
+    "Transferencias automáticas por coparticipación, leyes compl. y compensac. Acumulado anual. En millones de $ N": 58092792.0
+  },
+  "columnas_preparadas": 8,
+  "nota": "Valores publicados por IARAF. Las variaciones reales pueden utilizar su estimacion de inflacion del mes. El acumulado corresponde a enero hasta el mes informado.",
+  "reporte": "C:\\Users\\daeco\\Desktop\\automatizacion_indicadores\\reportes\\transferencias_fiscales\\transferencias_2026-09.json"
+}
