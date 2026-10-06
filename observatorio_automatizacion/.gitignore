@@ -1,0 +1,25 @@
+# Configuración real / credenciales
+.env
+.env.*
+!.env.ejemplo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+
+# Archivos generados
+logs/
+reportes/
+salidas_n8n/
+
+# Temporales
+*.tmp
+*.log
+
+# Credenciales del servidor
+credenciales/
+*.json.key
