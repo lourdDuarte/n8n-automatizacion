@@ -288,14 +288,7 @@ def completar_formulas(ruta: Path, fuentes: set[str] | None = None) -> dict:
 
 def recalcular_con_excel(ruta: Path) -> dict:
     if sys.platform != "win32":
-        # Servidor Linux: no hay Microsoft Excel. No hace falta recalcular aquí:
-        # el libro queda marcado para recalcular al abrirse (fullCalcOnLoad),
-        # el envío a Google Sheets compara fórmulas (no valores cacheados) y
-        # Google Sheets calcula sus propias fórmulas.
-        return {
-            "recalculado": False,
-            "detalle": "Sin Excel (servidor no Windows): el libro se recalcula al abrirse; Google Sheets calcula sus fórmulas.",
-        }
+        raise OSError("El recálculo automático requiere Windows con Microsoft Excel instalado.")
     segura = str(ruta.resolve()).replace("'", "''")
     script = rf"""
 $ErrorActionPreference = 'Stop'

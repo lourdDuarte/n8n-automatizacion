@@ -1,0 +1,17 @@
+Actualización Observatorio - 14/10/2026
+=======================================
+Contenido: carpeta scripts (completa, con las correcciones) + ejecutar_general.py
+
+Instalar en Linux (desde la carpeta donde está el zip):
+  1) Respaldo:   cp -r /RUTA/automatizacion_indicadores/scripts /RUTA/automatizacion_indicadores/scripts_respaldo_20261014
+                 cp /RUTA/automatizacion_indicadores/ejecutar_general.py /RUTA/automatizacion_indicadores/ejecutar_general_respaldo_20261014.py
+  2) Descomprimir encima (reemplaza):
+                 unzip -o actualizacion_observatorio_20261014.zip -d /RUTA/automatizacion_indicadores
+  3) Probar:     cd /RUTA/automatizacion_indicadores && python3 ejecutar_general.py   (o una ejecución manual desde n8n)
+
+NO se tocan: config/ (token de Telegram y credenciales), base/, fuentes/, reportes/ ni logs/.
+
+Notas Linux:
+  - La carpeta de ATP va en minúscula (scripts/atp). Si existe scripts/ATP de una copia anterior, borrarla.
+  - Combustibles lee la imagen con OCR. En Linux usa RapidOCR: pip install rapidocr_onnxruntime pillow
+  - Dependencias Python: openpyxl, xlrd, google-auth (las mismas que ya usa el sistema).

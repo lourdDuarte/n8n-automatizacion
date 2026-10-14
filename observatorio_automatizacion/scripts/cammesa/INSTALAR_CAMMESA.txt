@@ -1,0 +1,22 @@
+AUTOMATIZACIÓN CAMMESA — ARCHIVOS
+
+1. Crear esta carpeta si todavía no existe:
+   C:\Users\daeco\Desktop\automatizacion_indicadores\scripts\cammesa
+
+2. Copiar dentro de esa carpeta estos cuatro archivos:
+   descargar_cammesa.py
+   extraer_cammesa.py
+   actualizar_base_cammesa.py
+   ejecutar_cammesa.py
+
+3. Reemplazar el archivo principal:
+   Archivo: ejecutar_general.py
+   Destino: C:\Users\daeco\Desktop\automatizacion_indicadores\ejecutar_general.py
+
+4. No copiar manualmente el ZIP mensual. descargar_cammesa.py lo obtiene
+   automáticamente desde el sitio oficial de CAMMESA.
+
+5. En n8n, dentro del nodo "Es indicador general", agregar 'cammesa' a la
+   lista de fuentes. El valor para una prueba puntual es: cammesa
+
+No modificar ni eliminar los archivos de los demás indicadores.

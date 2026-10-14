@@ -26,6 +26,8 @@ from comun.columnas_por_titulo import resolver_columnas
 
 
 URL_XLS = "https://www.indec.gob.ar/ftp/cuadros/economia/sh_ipc_{mes:02d}_{anio:02d}.xls"
+# Desde octubre 2026 el INDEC publica la serie con nombre fijo (sin mes y año).
+URL_XLS_FIJA = "https://www.indec.gob.ar/ftp/cuadros/economia/sh_ipc_divisiones.xls"
 HOJA_BASE = "BASE DE DATOS"
 ARCHIVO_BASE = "BASE DE DATOS INDICADORES PROPIOS.xlsx"
 HOJA_MENSUAL = "Variación mensual IPC Nacional"
@@ -524,8 +526,18 @@ def main() -> int:
         if args.xls:
             contenido, url = args.xls.read_bytes(), args.xls.resolve().as_uri()
         else:
-            url, contenido = descubrir_planilla()
-        resultado = extraer(contenido, url)
+            # Se prueban los nombres conocidos y todos los archivos de la página del IPC;
+            # se usa el que trae el período más reciente (aunque el INDEC cambie el nombre).
+            sys.path.insert(0, str(raiz / "scripts" / "comun"))
+            from fuentes_web import PAGINAS_INDEC, candidatos, elegir_mas_reciente
+            hoy = date.today()
+            fechados = [URL_XLS.format(mes=p.month, anio=p.year % 100)
+                        for p in (sumar_meses(date(hoy.year, hoy.month, 1), -i) for i in range(3))]
+            urls = candidatos([URL_XLS_FIJA, *fechados], PAGINAS_INDEC["ipc"], incluir=("ipc",),
+                              excluir=("aperturas", "precios_promedio", "ponderadores"))
+            resultado, url, _ = elegir_mas_reciente(urls, lambda c, u: ((r := extraer(c, u))["periodo"], r))
+        if args.xls:
+            resultado = extraer(contenido, url)
         if not args.solo_extraer:
             resultado["actualizacion"] = actualizar_base(resultado, args.base)
         reporte = guardar_reporte(resultado, raiz / "scripts" / "reportes" / "ipc")

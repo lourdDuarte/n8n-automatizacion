@@ -72,6 +72,11 @@ def armar_mensaje(resumen: dict, extra_por_fuente: dict | None = None) -> str:
     extra_por_fuente = extra_por_fuente or {}
     por_fuente = (resumen.get('sheet_directo') or {}).get('por_fuente', {})
     lineas, avisos = [], []
+    try:  # aviso si el organismo publicó y no se encontró el dato (p. ej. cambió el nombre del archivo)
+        import vigilancia_fuentes
+        vigilancia = vigilancia_fuentes.revisar(resumen.get('resultados', []))
+    except Exception:  # noqa: BLE001 - la vigilancia nunca frena el aviso
+        vigilancia = {}
     cuenta = {'nuevos': 0, 'sin': 0, 'pend': 0, 'err': 0, 'incompletos': 0}
     for r in resumen.get('resultados', []):
         nombre = _limpio(r.get('nombre') or r.get('fuente'), 80)
@@ -110,6 +115,11 @@ def armar_mensaje(resumen: dict, extra_por_fuente: dict | None = None) -> str:
             linea = f'🔎 {nombre}: verificado, sin datos nuevos' + (f' (último: {periodo}).' if periodo else '.')
         if extra_por_fuente.get(fuente):
             linea += ' ' + extra_por_fuente[fuente]
+        # Notas que la fuente pide mostrar (p. ej. recordatorio de ANSES).
+        for nota in re.findall(r'^NOTA_TELEGRAM=(.+)$', str(r.get('salida_final') or ''), re.M):
+            linea += '\n   ' + _limpio(nota, 300)
+        if vigilancia.get(fuente) and estado != 'ERROR':
+            linea += '\n   ' + vigilancia[fuente]
         lineas.append(linea)
         if sheet and sheet.get('reparadas'):
             avisos.append(f"🛠️ {nombre}: {sheet['reparadas']} celdas de meses anteriores corregidas en el Sheet "

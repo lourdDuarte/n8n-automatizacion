@@ -63,6 +63,15 @@ FORMULAS = {
         "Indigencia (% sobre el total de hogares) F*",
 }
 
+# Columnas de variación agregadas por el equipo en el Sheet: se completan si
+# existen y se omiten (sin error) si todavía no están.
+FORMULAS_OPCIONALES = {
+    "Var pp. Pobreza (% sobre el total de hogares) N*":
+        "Pobreza (% sobre el total de hogares) N*",
+    "Var pp. Indigencia (% sobre el total de hogares) N*":
+        "Indigencia (% sobre el total de hogares) N*",
+}
+
 
 def columna_objetivo(ws, titulo: str) -> int:
     coincidencias = [
@@ -124,9 +133,17 @@ def descubrir() -> tuple[str, bytes, date, str]:
     else:
         mes, anio_archivo, esperado = 9, hoy.year - 1, date(hoy.year - 1, 6, 1)
     url = URL_CUADROS.format(mes=mes, anio=anio_archivo % 100)
+    # Además del nombre conocido se prueban los cuadros de la página de pobreza del INDEC,
+    # por si cambian el nombre del archivo; se usa el del semestre más reciente.
+    sys.path.insert(0, str(RAIZ / "scripts" / "comun"))
+    from fuentes_web import PAGINAS_INDEC, candidatos, elegir_mas_reciente
+
+    def procesar(contenido_, url_):
+        periodo_, etiqueta_ = periodo_cuadros(abrir_cuadros(contenido_))
+        return periodo_, (url_, contenido_, periodo_, etiqueta_)
     try:
-        contenido = descargar(url, 90)
-        periodo, etiqueta = periodo_cuadros(abrir_cuadros(contenido))
+        urls = candidatos([url], PAGINAS_INDEC["pobreza"], incluir=("pobreza",), excluir=("coeficiente",), extensiones=(".xls",))
+        (url, contenido, periodo, etiqueta), _, _ = elegir_mas_reciente(urls, procesar)
     except Exception as exc:
         raise FileNotFoundError(
             f"No está disponible el cuadro oficial del período {esperado}: {url}. "
@@ -212,7 +229,11 @@ def main() -> int:
             escribir_objetivo(ws, fila, titulo, valor, cambios, coincidencias)
 
         formulas_escritas = {}
-        for titulo_formula, titulo_dato in FORMULAS.items():
+        todas = dict(FORMULAS)
+        for titulo_formula, titulo_dato in FORMULAS_OPCIONALES.items():
+            if any(normalizar(ws.cell(1, c).value) == normalizar(titulo_formula) for c in range(1, ws.max_column + 1)):
+                todas[titulo_formula] = titulo_dato
+        for titulo_formula, titulo_dato in todas.items():
             columna_dato = columna_objetivo(ws, titulo_dato)
             letra = get_column_letter(columna_dato)
             formula = f"={letra}{fila}-{letra}{fila_anterior}"

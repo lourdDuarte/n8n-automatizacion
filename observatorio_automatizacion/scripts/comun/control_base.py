@@ -75,6 +75,9 @@ def _formula_estipulada(formula: str, fila: int) -> bool:
 def revisar(cliente: ClienteSheets, hoy: date | None = None) -> dict:
     hoy = hoy or date.today()
     actual = (hoy.year, hoy.month)
+    # Los cálculos fuera de lo estipulado solo se avisan en los últimos 12 meses:
+    # los de períodos viejos no se comentan.
+    desde_aviso = (hoy.year - 1, hoy.month)
     valores = cliente.leer(RANGO, render='UNFORMATTED_VALUE')
     formulas = cliente.leer(RANGO, render='FORMULA')
     if not valores:
@@ -104,7 +107,7 @@ def revisar(cliente: ClienteSheets, hoy: date | None = None) -> dict:
                 motivo = 'columna sin encabezado'
             elif fila > ult_fila:
                 motivo = 'fila sin PERIODO (debajo de la tabla)'
-            elif fila > 1 and col > 1 and p and p <= actual and es_formula(fo) and not _formula_estipulada(fo, fila):
+            elif fila > 1 and col > 1 and p and desde_aviso <= p <= actual and es_formula(fo) and not _formula_estipulada(fo, fila):
                 motivo = f'cálculo fuera de lo estipulado ({texto_periodo(p)})'
             elif fila > 1 and col > 1 and p and p > actual:
                 if es_formula(fo):

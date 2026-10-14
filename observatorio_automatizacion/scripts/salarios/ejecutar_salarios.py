@@ -19,15 +19,22 @@ TITULOS=[
 "IS sector público nacional Var% i.m.","IS sector público nacional Var% i.a.","IS sector público nacional con respecto a diciembre del año anterior","IS sector público provincial Var% i.m.","IS sector público provincial Var% i.a.","IS sector público provincial con respecto a diciembre del año anterior"]
 
 def descubrir():
-    hoy=datetime.now()
-    for retroceso in range(0,18):
+    """Planilla vigente del índice de salarios aunque el INDEC cambie el nombre: prueba los
+    nombres fechados de los últimos meses y los archivos de la página de salarios; usa la
+    que trae el período más reciente en los tres cuadros."""
+    sys.path.insert(0,str(RAIZ/"scripts"/"comun"))
+    from fuentes_web import PAGINAS_INDEC, candidatos, elegir_mas_reciente
+    hoy=datetime.now(); fechados=[]
+    for retroceso in range(0,4):
         indice=hoy.year*12+hoy.month-1-retroceso; anio=indice//12; mes=indice%12+1
-        url=f"https://www.indec.gob.ar/ftp/cuadros/sociedad/variaciones_salarios_{mes:02d}_{anio%100:02d}.xls"
-        try:
-            contenido=descargar(url,45)
-            if contenido.startswith(bytes.fromhex("D0CF11E0A1B11AE1")): return url,contenido
-        except Exception: pass
-    raise FileNotFoundError("No se encontró la planilla vigente del índice de salarios")
+        fechados.append(f"https://www.indec.gob.ar/ftp/cuadros/sociedad/variaciones_salarios_{mes:02d}_{anio%100:02d}.xls")
+    def procesar(contenido,url):
+        libro=xlrd.open_workbook(file_contents=contenido)
+        comunes=set(leer_hoja(libro.sheet_by_name("Cuadro 1"),2,12))&set(leer_hoja(libro.sheet_by_name("Cuadro 3"),2,8))
+        return max(comunes),(url,contenido)
+    urls=candidatos(fechados,PAGINAS_INDEC["salarios"],incluir=("salario",),extensiones=(".xls",))
+    (url,contenido),_,_=elegir_mas_reciente(urls,procesar)
+    return url,contenido
 
 def leer_hoja(hoja,inicio,fin):
     anio=None; salida={}

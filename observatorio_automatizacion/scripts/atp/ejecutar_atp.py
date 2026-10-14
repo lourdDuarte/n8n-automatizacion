@@ -96,15 +96,38 @@ def numero_argentino(texto: str) -> float:
     return float(limpio)
 
 
-def descargar_html(timeout: int = 60) -> str:
-    solicitud = urllib.request.Request(
-        URL_FUENTE,
-        headers={"User-Agent": "Mozilla/5.0 (automatizacion-indicadores/1.0)"},
-    )
-    with urllib.request.urlopen(solicitud, timeout=timeout) as respuesta:
-        contenido = respuesta.read()
-        codificacion = respuesta.headers.get_content_charset() or "utf-8"
-    return contenido.decode(codificacion, errors="replace")
+CABECERAS_NAVEGADOR = {
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "es-AR,es;q=0.9",
+    "Referer": "https://www.formosa.gob.ar/atp",
+}
+
+
+def descargar_html(timeout: int = 60, intentos: int = 3) -> str:
+    """La página de la ATP a veces rechaza pedidos automáticos (HTTP 403/405/429/5xx).
+    Se pide como un navegador y se reintenta con espera antes de dar error."""
+    import time
+    import urllib.error
+    ultimo_error: Exception | None = None
+    for intento in range(1, intentos + 1):
+        try:
+            solicitud = urllib.request.Request(URL_FUENTE, headers=CABECERAS_NAVEGADOR)
+            with urllib.request.urlopen(solicitud, timeout=timeout) as respuesta:
+                contenido = respuesta.read()
+                codificacion = respuesta.headers.get_content_charset() or "utf-8"
+            return contenido.decode(codificacion, errors="replace")
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as error:
+            ultimo_error = error
+            codigo = getattr(error, "code", None)
+            if codigo is not None and codigo not in (403, 405, 408, 429, 500, 502, 503, 504):
+                raise
+            print(f"Aviso: la página de la ATP respondió {error} (intento {intento} de {intentos})")
+            if intento < intentos:
+                time.sleep(30 * intento)
+    raise RuntimeError(f"La página de la ATP no respondió tras {intentos} intentos ({ultimo_error}); "
+                       "se reintenta en la próxima revisión") from ultimo_error
 
 
 class LectorTablas(HTMLParser):

@@ -61,8 +61,21 @@ def formula_variacion(ws,fila,periodo,titulo_base,meses_atras):
     c=columna_titulo(ws,titulo_base)
     return f"={ws.cell(fila,c).coordinate}/{ws.cell(fila_comparacion,c).coordinate}*100-100"
 
+def _libro():
+    """La serie de supermercados aunque el INDEC cambie el nombre del archivo: se prueban el
+    nombre conocido y los archivos de la página que tengan los cuadros esperados."""
+    sys.path.insert(0, str(RAIZ / "scripts" / "comun"))
+    from fuentes_web import PAGINAS_INDEC, candidatos, elegir_mas_reciente
+    def procesar(contenido, url):
+        libro = load_workbook(io.BytesIO(contenido), data_only=True, read_only=False)
+        return ultimo(libro["Cuadro 3."]), (libro, url)
+    urls = candidatos([URL], PAGINAS_INDEC["supermercados"], incluir=("supermercado",), excluir=("mayorista",), extensiones=(".xlsx",))
+    (libro, url), _, _ = elegir_mas_reciente(urls, procesar)
+    return libro, url
+
 def extraer():
-    libro=load_workbook(io.BytesIO(descargar(URL)),data_only=True,read_only=False)
+    global URL
+    libro, URL = _libro()
     c3,c5,c6=libro["Cuadro 3."],libro["Cuadro 5."],libro["Cuadro 6."]
     periodo=ultimo(c3)
     if ultimo(c5)!=periodo or ultimo(c6)!=periodo: raise ValueError("Los cuadros de supermercados no terminan en el mismo período")

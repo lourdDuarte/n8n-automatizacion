@@ -67,9 +67,21 @@ def filas_periodos(hoja):
         if anio and m in MESES: salida.append((date(anio,MESES[m],1),r))
     return salida
 
+def _planilla(preferida, incluir, hoja):
+    """Busca la planilla del EMAE aunque el INDEC cambie el nombre: prueba la conocida y
+    las de la página del EMAE que tengan la hoja esperada; usa la del período más reciente."""
+    sys.path.insert(0, str(RAIZ / "scripts" / "comun"))
+    from fuentes_web import PAGINAS_INDEC, candidatos, elegir_mas_reciente
+    def procesar(contenido, url):
+        libro = xlrd.open_workbook(file_contents=contenido)
+        return max(p for p, _ in filas_periodos(libro.sheet_by_name(hoja))), libro
+    urls = candidatos([preferida], PAGINAS_INDEC["emae"], incluir=incluir)
+    libro, url, _ = elegir_mas_reciente(urls, procesar)
+    return libro, url
+
 def extraer():
-    lm=xlrd.open_workbook(file_contents=descargar(URL_MENSUAL)); hm=lm.sheet_by_name("Tabla")
-    la=xlrd.open_workbook(file_contents=descargar(URL_ACTIVIDAD)); ha=la.sheet_by_name("Tabla Var Letras")
+    lm, _ = _planilla(URL_MENSUAL, ("emae", "mensual"), "Tabla"); hm=lm.sheet_by_name("Tabla")
+    la, _ = _planilla(URL_ACTIVIDAD, ("emae", "actividad"), "Tabla Var Letras"); ha=la.sheet_by_name("Tabla Var Letras")
     fm=filas_periodos(hm); fa=dict(filas_periodos(ha)); periodo,r=max(fm,key=lambda x:x[0])
     if periodo not in fa: raise ValueError("Las dos planillas EMAE no terminan en el mismo período")
     indice_actual=float(hm.cell_value(r,2))
