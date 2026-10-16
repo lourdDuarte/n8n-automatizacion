@@ -458,7 +458,7 @@ un resumen JSON estable para n8n.
             return {'cambios_informados': False, 'hubo_cambios': False, 'celdas_actualizadas': 0, 'periodo': None, 'cambios': [], 'valores_extraidos': {}, 'limpiar_periodo_erroneo': None}
         actualizacion = datos.get('actualizacion')
         if not isinstance(actualizacion, dict):
-            return {'cambios_informados': False, 'hubo_cambios': False, 'celdas_actualizadas': 0, 'periodo': periodo_resultado(datos), 'cambios': [], 'valores_extraidos': datos.get('valores', {}), 'limpiar_periodo_erroneo': datos.get('limpiar_periodo_erroneo')}
+            return {'cambios_informados': False, 'hubo_cambios': False, 'celdas_actualizadas': 0, 'periodo': periodo_resultado(datos), 'cambios': [], 'valores_extraidos': datos.get('valores', {}), 'limpiar_periodo_erroneo': datos.get('limpiar_periodo_erroneo'), 'permitir_reemplazos': bool(datos.get('permitir_reemplazos'))}
         cantidad = actualizacion.get('celdas_actualizadas', 0)
         try:
             cantidad = int(cantidad)
@@ -467,7 +467,7 @@ un resumen JSON estable para n8n.
         cambios = actualizacion.get('cambios', [])
         if not isinstance(cambios, list):
             cambios = []
-        return {'cambios_informados': True, 'hubo_cambios': cantidad > 0, 'celdas_actualizadas': cantidad, 'periodo': periodo_resultado(datos), 'periodos': datos.get('periodos', []), 'cambios': cambios, 'detalle_completo': actualizacion.get('detalle_completo', []), 'cargas_google': actualizacion.get('cargas_google', []), 'reporte': datos.get('reporte'), 'power_bi': datos.get('power_bi'), 'valores_extraidos': datos.get('valores', {}), 'limpiar_periodo_erroneo': datos.get('limpiar_periodo_erroneo')}
+        return {'cambios_informados': True, 'hubo_cambios': cantidad > 0, 'celdas_actualizadas': cantidad, 'periodo': periodo_resultado(datos), 'periodos': datos.get('periodos', []), 'cambios': cambios, 'detalle_completo': actualizacion.get('detalle_completo', []), 'cargas_google': actualizacion.get('cargas_google', []), 'reporte': datos.get('reporte'), 'power_bi': datos.get('power_bi'), 'valores_extraidos': datos.get('valores', {}), 'limpiar_periodo_erroneo': datos.get('limpiar_periodo_erroneo'), 'permitir_reemplazos': bool(datos.get('permitir_reemplazos'))}
 
     def ejecutar_fuente(clave: str, fuente: Fuente, estricto: bool) -> dict:
         """Ejecuta una fuente y devuelve un resultado normalizado."""
@@ -590,7 +590,7 @@ un resumen JSON estable para n8n.
                 periodo_erroneo = resultado.get('limpiar_periodo_erroneo')
                 if periodo_erroneo:
                     actualizaciones_google.append({'hoja': HOJA_DESTINO, 'periodo': periodo_erroneo, 'valores': {titulo: '' for titulo in resultado['valores_extraidos']}})
-                actualizaciones_google.append({'hoja': HOJA_DESTINO, 'periodo': resultado['periodo'], 'valores': resultado['valores_extraidos']})
+                actualizaciones_google.append({'hoja': HOJA_DESTINO, 'periodo': resultado['periodo'], 'valores': resultado['valores_extraidos'], 'permitir_reemplazos': bool(resultado.get('permitir_reemplazos'))})
         if seleccion_local:
             estado_despues = capturar_hoja()
             for item in preparar_actualizaciones_forzadas(estado_despues, seleccion_local, resultados, args.forzar_google):

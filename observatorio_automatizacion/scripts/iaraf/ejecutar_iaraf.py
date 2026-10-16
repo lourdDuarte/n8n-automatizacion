@@ -91,7 +91,16 @@ def main() -> None:
     registros = []
     try:
         for nombre, archivo in ETAPAS:
-            registros.append(ejecutar_etapa(nombre, archivo))
+            try:
+                registros.append(ejecutar_etapa(nombre, archivo))
+            except ErrorEtapa as error:
+                # Si la web de IARAF no deja consultar (p. ej. verificación anti-robots), se sigue
+                # con el último PDF guardado en fuentes/iaraf (descargado antes o puesto a mano).
+                if nombre != "DESCARGA" or not list((RAIZ / "fuentes" / "iaraf").glob("*.pdf")):
+                    raise
+                registros.append(error.registro)
+                print("AVISO: no se pudo consultar la página de IARAF; se usa el último PDF guardado.")
+                print("NOTA_TELEGRAM=La página de IARAF tiene una verificación anti-robots y no se pudo consultar; se usó el último informe guardado. Si salió uno nuevo, descargalo a mano y guardalo en la carpeta fuentes\\iaraf.")
     except Exception as error:
         if isinstance(error, ErrorEtapa):
             registros.append(error.registro)

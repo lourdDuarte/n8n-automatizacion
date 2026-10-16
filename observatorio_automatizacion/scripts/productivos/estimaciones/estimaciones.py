@@ -93,6 +93,8 @@ def actualizar_sheet(datos: dict, cliente: ClienteSheets | None = None) -> dict:
     existentes, ultima = {}, fila_enc
     for n in range(fila_enc + 1, len(filas) + 1):
         cu, ca = celda(n, c_cult), celda(n, c_camp)
+        if clave(cu) == clave('Cultivo') and clave(ca) == clave('Campaña'):
+            break  # otro cuadro armado debajo (con su propio encabezado): no es parte de la tabla
         if cu not in (None, ''):
             ultima = n
             existentes.setdefault((_norm(cu), str(ca).strip()), []).append(n)

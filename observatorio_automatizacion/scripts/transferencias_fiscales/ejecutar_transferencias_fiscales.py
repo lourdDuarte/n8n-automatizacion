@@ -258,50 +258,274 @@ def extraer_pdf(contenido):
 
     return periodo, valores
 
+# --------------------------------------------------------------- fuente oficial (DNAP)
+PAGINA_DNAP = "https://www.argentina.gob.ar/economia/sechacienda/asuntosprovinciales/ron"
+MESES_HOJA = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+              "septiembre", "octubre", "noviembre", "diciembre"]
+
+
+def _consolidada(anio):
+    """Libro 'Información consolidada' del año (Dirección Nacional de Asuntos Provinciales)."""
+    import io
+    from openpyxl import load_workbook
+    pagina = descargar(PAGINA_DNAP).decode("utf-8", errors="replace")
+    enlaces = [urljoin("https://www.argentina.gob.ar/", h.replace("blank:#", ""))
+               for h in re.findall(r'href=["\']([^"\']+)["\']', pagina, flags=re.I)]
+    candidatos = [u for u in enlaces
+                  if re.search(rf"informacion_consolidada_?{anio}[^/]*\.xlsx?$", u, flags=re.I)]
+    if not candidatos:
+        raise RuntimeError(f"La página de la DNAP no muestra la información consolidada {anio}")
+    contenido = descargar(candidatos[0])
+    if candidatos[0].lower().endswith(".xls"):
+        raise RuntimeError(f"La información consolidada {anio} está en .xls (formato viejo)")
+    return load_workbook(io.BytesIO(contenido), read_only=True, data_only=True), candidatos[0]
+
+
+def _mes_dnap(libro, mes):
+    """(Formosa, Provincias + CABA) en millones de $ de la columna Total (1)+(2) del mes."""
+    nombre = next((h for h in libro.sheetnames if normalizar(h).startswith(MESES_HOJA[mes - 1][:4])), None)
+    if not nombre:
+        return None
+    filas = list(libro[nombre].iter_rows(values_only=True))
+    col = None
+    for fila in filas[:15]:
+        for k, v in enumerate(fila):
+            if isinstance(v, str) and normalizar(v) == "total" and k > 10:
+                col = k
+    if col is None:
+        raise RuntimeError(f"Hoja {nombre}: no se encuentra la columna Total (1)+(2)")
+    def valor(etiqueta):
+        for fila in filas:
+            if fila and isinstance(fila[0], str) and normalizar(fila[0]) == etiqueta \
+                    and isinstance(fila[col], (int, float)):
+                return float(fila[col])
+        return None
+    formosa, provincias, caba = valor("formosa"), valor("provincias"), valor("c.a.b.a")
+    if not formosa or not provincias:
+        return None
+    return formosa, provincias + (caba or 0.0)
+
+
+SERIE_IPC = "https://www.indec.gob.ar/ftp/cuadros/economia/serie_ipc_divisiones.csv"
+PAGINA_REM = "https://www.bcra.gob.ar/relevamiento-expectativas-mercado-rem/"
+
+
+def _indices_ipc_nacion():
+    """{'AAAAMM': índice IPC nivel general Nacional} desde la serie oficial del INDEC."""
+    texto = descargar(SERIE_IPC).decode("latin-1", errors="replace")
+    indices = {}
+    for linea in texto.splitlines():
+        c = [x.strip().strip('"') for x in linea.split(";")]
+        if len(c) >= 8 and c[0] == "0" and c[7].lower() == "nacional":
+            try:
+                indices[c[3]] = float(c[4].replace(",", "."))
+            except ValueError:
+                pass
+    if not indices:
+        raise RuntimeError("La serie del IPC del INDEC no trae el nivel general Nacional")
+    return indices
+
+
+def _rem_mensual(anio, mes):
+    """Mediana del REM (BCRA) para la inflación mensual de ese mes, si está publicada."""
+    import io
+    from datetime import date, timedelta
+    from openpyxl import load_workbook
+    pagina = descargar(PAGINA_REM).decode("utf-8", errors="replace")
+    enlaces = [urljoin(PAGINA_REM, h) for h in re.findall(r'href=["\']([^"\']+)["\']', pagina, flags=re.I)]
+    tablas = [u for u in enlaces if re.search(r"tablas[^/]*\.xlsx$", u, flags=re.I)]
+    if not tablas:
+        return None
+    libro = load_workbook(io.BytesIO(descargar(tablas[0])), read_only=True, data_only=True)
+    hoja = libro[libro.sheetnames[0]]
+    fin_mes = (date(anio + (mes == 12), mes % 12 + 1, 1) - timedelta(days=1))
+    en_ipc = False
+    for fila in hoja.iter_rows(values_only=True):
+        textos = " ".join(str(x) for x in fila if isinstance(x, str)).lower()
+        if "precios minoristas" in textos:
+            en_ipc = "nivel general" in textos   # la primera tabla es el IPC nivel general Nacional
+            continue
+        if not en_ipc or len(fila) < 4:
+            continue
+        periodo, referencia, mediana = fila[1], fila[2], fila[3]
+        if isinstance(periodo, (int, float)):
+            periodo = date(1899, 12, 30) + timedelta(days=int(periodo))
+        if hasattr(periodo, "year") and (periodo.year, periodo.month) == (fin_mes.year, fin_mes.month) \
+                and "mensual" in str(referencia).lower() and isinstance(mediana, (int, float)):
+            return float(mediana), tablas[0].rsplit("/", 1)[-1]
+    return None
+
+
+def inflacion_interanual_estimada(periodo):
+    """Mismo cálculo que IARAF: IPC Nacional del INDEC hasta el mes anterior por una
+    inflación supuesta para el mes informado, contra el mismo mes del año anterior.
+    Supuesto del mes: mediana del REM del BCRA; si no está, el dato del INDEC del mes
+    (si ya salió) o, en último caso, la inflación del mes anterior."""
+    anio, mes = int(periodo[:4]), int(periodo[5:7])
+    previo = f"{anio - (mes == 1)}{(mes - 2) % 12 + 1:02d}"
+    hace_un_anio = f"{anio - 1}{mes:02d}"
+    indices = _indices_ipc_nacion()
+    if previo not in indices or hace_un_anio not in indices:
+        raise RuntimeError(f"Faltan índices del IPC ({previo} o {hace_un_anio})")
+    supuesto = None
+    try:
+        supuesto = _rem_mensual(anio, mes)
+        if supuesto:
+            supuesto = (supuesto[0], f"REM BCRA ({supuesto[1]})")
+    except Exception as error:  # noqa: BLE001
+        print(f"AVISO: no se pudo leer el REM del BCRA: {error}")
+    actual = f"{anio}{mes:02d}"
+    if not supuesto and actual in indices:
+        supuesto = ((indices[actual] / indices[previo] - 1) * 100, "INDEC (dato del mes)")
+    if not supuesto:
+        antes = f"{int(previo[:4]) - (int(previo[4:]) == 1)}{(int(previo[4:]) - 2) % 12 + 1:02d}"
+        supuesto = ((indices[previo] / indices[antes] - 1) * 100, "INDEC (mes anterior, sin REM)")
+    tasa = (indices[previo] * (1 + supuesto[0] / 100) / indices[hace_un_anio] - 1) * 100
+    return tasa, supuesto[0], supuesto[1]
+
+
+def desde_dnap():
+    """Mismos datos que publica IARAF, tomados de la fuente oficial (Ministerio de Economía)."""
+    hoy = datetime.now()
+    libro, url = _consolidada(hoy.year)
+    meses = [m for m in range(1, 13) if _mes_dnap(libro, m)]
+    if not meses and hoy.month <= 2:
+        libro, url = _consolidada(hoy.year - 1)
+        meses = [m for m in range(1, 13) if _mes_dnap(libro, m)]
+    if not meses:
+        raise RuntimeError("La información consolidada de la DNAP no tiene meses con datos")
+    anio = int(re.search(r"(20\d{2})", url.rsplit("/", 1)[-1])[1])
+    mes = max(meses)
+    actual = [_mes_dnap(libro, m) for m in range(1, mes + 1)]
+    if any(x is None for x in actual):
+        raise RuntimeError("Faltan meses intermedios en la información consolidada de la DNAP")
+    previo, _ = _consolidada(anio - 1)
+    anterior = _mes_dnap(previo, mes)
+    if not anterior:
+        raise RuntimeError(f"No se encuentra {MESES_HOJA[mes - 1]} {anio - 1} en la DNAP")
+    periodo = f"{anio:04d}-{mes:02d}-01"
+    f, n = actual[-1]
+    nom_f = round((f / anterior[0] - 1) * 100, 1)
+    nom_n = round((n / anterior[1] - 1) * 100, 1)
+    valores = {
+        TITULOS[0]: round(f), TITULOS[1]: nom_f, TITULOS[3]: round(sum(x[0] for x in actual)),
+        TITULOS[4]: round(n), TITULOS[5]: nom_n, TITULOS[7]: round(sum(x[1] for x in actual)),
+    }
+    try:
+        tasa, supuesto, origen = inflacion_interanual_estimada(periodo)
+        valores[TITULOS[2]] = round(((1 + nom_f / 100) / (1 + tasa / 100) - 1) * 100, 1)
+        valores[TITULOS[6]] = round(((1 + nom_n / 100) / (1 + tasa / 100) - 1) * 100, 1)
+        ipc = {"interanual": round(tasa, 2), "supuesto_mes": round(supuesto, 2), "origen_supuesto": origen}
+    except Exception as error:  # noqa: BLE001
+        print(f"AVISO: no se pudo estimar la inflación del período: {error}")
+        ipc = None
+    return periodo, valores, url, ipc
+
+
+def desde_iaraf(args):
+    """Informe de IARAF: web, o último PDF guardado si la web no deja consultar."""
+    if args.pdf:
+        return args.pdf.read_bytes(), None, None, args.pdf.name, True
+    try:
+        url_nota, titulo = descubrir()
+        url_pdf = enlace_pdf(url_nota)
+        return descargar(url_pdf), url_nota, url_pdf, titulo, True
+    except Exception as error:  # noqa: BLE001
+        locales = [*(RAIZ / "fuentes" / "iaraf").glob("*.pdf"),
+                   *(RAIZ / "reportes" / "transferencias_fiscales").glob("*.pdf")]
+        if not locales:
+            raise
+        ultimo = max(locales, key=lambda r: r.stat().st_mtime)
+        print(f"AVISO: no se pudo consultar IARAF ({error}); se usa {ultimo.name}")
+        return ultimo.read_bytes(), None, None, ultimo.name, False
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--solo-extraer", action="store_true")
     parser.add_argument("--pdf", type=Path)
     args = parser.parse_args()
-
-    if args.pdf:
-        contenido = args.pdf.read_bytes()
-        url_nota = None
-        url_pdf = None
-        titulo = args.pdf.name
-    else:
-        url_nota, titulo = descubrir()
-        url_pdf = enlace_pdf(url_nota)
-        contenido = descargar(url_pdf)
-
-    if not contenido.startswith(b"%PDF"):
-        raise RuntimeError(
-            "La descarga no devolvio un PDF. "
-            "Puede haber una pantalla de acceso o un cambio de enlace."
-        )
-
-    periodo, valores = extraer_pdf(contenido)
     carpeta = RAIZ / "reportes" / "transferencias_fiscales"
     carpeta.mkdir(parents=True, exist_ok=True)
 
-    pdf = carpeta / f"transferencias_{periodo[:7]}.pdf"
-    pdf.write_bytes(contenido)
+    # Fuente 1: IARAF (trae además su variación real con inflación estimada).
+    iaraf = None
+    try:
+        contenido, url_nota, url_pdf, titulo, en_linea = desde_iaraf(args)
+        if not contenido.startswith(b"%PDF"):
+            raise RuntimeError("La descarga no devolvio un PDF (pantalla de acceso o cambio de enlace).")
+        periodo_i, valores_i = extraer_pdf(contenido)
+        iaraf = (periodo_i, valores_i, contenido, url_nota, url_pdf, titulo, en_linea)
+    except Exception as error:  # noqa: BLE001
+        print(f"AVISO: IARAF no disponible: {error}")
+
+    # Fuente 2: Ministerio de Economía - DNAP (oficial; misma cifra que usa IARAF).
+    dnap = None
+    try:
+        dnap = desde_dnap()
+    except Exception as error:  # noqa: BLE001
+        print(f"AVISO: DNAP no disponible: {error}")
+
+    if not iaraf and not dnap:
+        raise RuntimeError("No se pudo consultar ni IARAF ni la DNAP (Ministerio de Economía).")
+
+    notas = []
+    usar_dnap = bool(dnap and (not iaraf or dnap[0] > iaraf[0]))
+    reemplazar = False
+    if iaraf and not usar_dnap:
+        # Si ese mes se había cargado con la DNAP (variación real estimada), el informe de
+        # IARAF la reemplaza: es la cifra de referencia del Observatorio.
+        try:
+            previo = json.loads((carpeta / f"transferencias_{iaraf[0][:7]}.json").read_text(encoding="utf-8"))
+            reemplazar = str(previo.get("origen_dato", "")).startswith("DNAP")
+        except (OSError, ValueError):
+            pass
+    if usar_dnap:
+        periodo, valores, url_dnap, ipc = dnap
+        origen = "DNAP - Ministerio de Economía (información consolidada RON)"
+        real = (f"variación real estimada como IARAF: inflación i.a. {ipc['interanual']:.1f}% "
+                f"(IPC INDEC + {ipc['supuesto_mes']:.2f}% supuesto para el mes, {ipc['origen_supuesto']}); "
+                "cuando IARAF publique, se reemplaza por su cifra" if ipc
+                else "la variación real queda pendiente (no se pudo estimar la inflación)")
+        notas.append(f"Dato tomado de la fuente oficial (Ministerio de Economía - DNAP), {real}.")
+        url_nota, url_pdf, titulo, contenido = url_dnap, None, url_dnap.rsplit("/", 1)[-1], None
+    else:
+        periodo, valores, contenido, url_nota, url_pdf, titulo, en_linea = iaraf
+        origen = "IARAF"
+        if not en_linea:
+            notas.append("La página de IARAF no se pudo consultar (verificación anti-robots); "
+                         "se usó el último informe guardado y se controló con la DNAP.")
+        pdf = carpeta / f"transferencias_{periodo[:7]}.pdf"
+        pdf.write_bytes(contenido)
+        # Control cruzado: si la DNAP tiene el mismo mes, los montos tienen que coincidir.
+        if dnap and dnap[0] == periodo:
+            for t in (TITULOS[0], TITULOS[4]):
+                a, b = valores.get(t), dnap[1].get(t)
+                if a and b and abs(a / b - 1) > 0.005:
+                    notas.append(f"Diferencia IARAF vs DNAP en '{t[-1]}': {a:,.0f} vs {b:,.0f} millones; revisar.")
+    if reemplazar:
+        notas.append("IARAF publicó el mes que estaba cargado con la DNAP: se reemplazó la variación real estimada por la de IARAF.")
+    for nota in notas:
+        print("NOTA_TELEGRAM=" + nota)
 
     resultado = {
         "fuente": "transferencias_fiscales",
         "nombre": "Transferencias automaticas - IARAF",
         "estado": "OK",
         "periodo": periodo,
+        "origen_dato": origen,
         "consultado_en": datetime.now().astimezone().isoformat(),
         "url_informe": url_nota,
         "url_pdf": url_pdf,
         "titulo_informe": titulo,
-        "sha256_pdf": hashlib.sha256(contenido).hexdigest(),
+        "sha256_pdf": hashlib.sha256(contenido).hexdigest() if contenido else None,
         "valores": valores,
-        "columnas_preparadas": 8,
+        "permitir_reemplazos": reemplazar,
+        "inflacion_estimada": dnap[3] if usar_dnap else None,
+        "columnas_preparadas": len(valores),
         "nota": (
-            "Valores publicados por IARAF. Las variaciones reales "
-            "pueden utilizar su estimacion de inflacion del mes. "
+            "Montos de transferencias automáticas (RON: coparticipación, leyes complementarias y "
+            "compensaciones) a Formosa y al total de provincias + CABA. Fuente: " + origen + ". "
             "El acumulado corresponde a enero hasta el mes informado."
         ),
     }
