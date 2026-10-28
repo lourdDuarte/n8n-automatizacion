@@ -121,6 +121,12 @@ def descargar_html(timeout: int = 60, intentos: int = 3) -> str:
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as error:
             ultimo_error = error
             codigo = getattr(error, "code", None)
+            cabeceras = getattr(error, "headers", None)
+            if cabeceras is not None and str(cabeceras.get("x-amzn-waf-action", "")).lower() in ("captcha", "challenge"):
+                # Verificación anti-robots de la página (AWS WAF): no se saltea ni se reintenta.
+                raise RuntimeError("La página de la ATP pide verificación anti-robots (captcha) a este equipo: "
+                                   "bloquea las consultas desde servidores. Se carga desde la PC; para que el servidor "
+                                   "pueda leerla, la ATP tiene que habilitar su IP") from error
             if codigo is not None and codigo not in (403, 405, 408, 429, 500, 502, 503, 504):
                 raise
             print(f"Aviso: la página de la ATP respondió {error} (intento {intento} de {intentos})")

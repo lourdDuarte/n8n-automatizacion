@@ -215,16 +215,44 @@ def quitar_proteccion(cliente: ClienteSheets) -> dict:
     return {'estado': 'OK', 'accion': 'quitada'}
 
 
+_REF = re.compile(r"(?<![!A-Za-z_'\"])\$?([A-Z]{1,3})\$?(\d+)(?![A-Za-z_(])")
+
+
+def _col_num(letras: str) -> int:
+    n = 0
+    for c in letras:
+        n = n * 26 + ord(c) - 64
+    return n
+
+
+def _clave_estable(celda: str, formula) -> str:
+    """Clave que no cambia si se insertan columnas: fila + fórmula con las referencias de la misma
+    hoja escritas en forma relativa a la celda (R[filas]C[columnas]). Las referencias a otra
+    pestaña ('Hoja'!F60) no se mueven al insertar columnas en BASE DE DATOS, quedan iguales."""
+    m = re.fullmatch(r'([A-Z]+)(\d+)', str(celda))
+    if not m:
+        return f'{celda}|{formula}'
+    col, fila = _col_num(m[1]), int(m[2])
+    relativa = _REF.sub(lambda r: f'R[{int(r[2]) - fila}]C[{_col_num(r[1]) - col}]', str(formula or ''))
+    return f'{fila}|{relativa}'
+
+
 def _linea_base(hallazgos: list[dict]) -> list[dict]:
-    """Primera vez: guarda las fórmulas fuera de patrón que ya existían y no las avisa."""
+    """Primera vez: guarda las fórmulas fuera de patrón que ya existían y no las avisa.
+    La comparación es por fila y fórmula relativa, así las fórmulas conocidas no vuelven a
+    avisarse cuando se insertan columnas en el Sheet (cambia la letra de la columna)."""
     dentro = [h for h in hallazgos if h.get('limpiar_con') is None]
-    clave = lambda h: f"{h['celda']}|{h.get('formula')}"  # noqa: E731
+    clave = lambda h: _clave_estable(h['celda'], h.get('formula'))  # noqa: E731
     if not LINEA_BASE.exists():
         CARPETA_REPORTES.mkdir(parents=True, exist_ok=True)
         LINEA_BASE.write_text(json.dumps(sorted(clave(h) for h in dentro), ensure_ascii=False, indent=1), encoding='utf-8')
         conocidas = {clave(h) for h in dentro}
     else:
-        conocidas = set(json.loads(LINEA_BASE.read_text(encoding='utf-8')))
+        conocidas = set()
+        for item in json.loads(LINEA_BASE.read_text(encoding='utf-8')):
+            celda, _, formula = str(item).partition('|')
+            # formato viejo "ND26|=..." -> se pasa a la clave estable; el nuevo ya viene "26|=..."
+            conocidas.add(_clave_estable(celda, formula) if re.fullmatch(r'[A-Z]+\d+', celda) else str(item))
     return [h for h in hallazgos if h.get('limpiar_con') is not None or clave(h) not in conocidas]
 
 

@@ -143,44 +143,70 @@ def serie_simple(filas: list) -> dict:
     return {p: {'F': num(f, fi), 'N': num(f, ti)} for p, f in meses.items()}
 
 
-def extraer(contenido: bytes) -> dict:
+# Desde el III trimestre 2026 ANSES publica tres informes separados (Pasivos;
+# Asignaciones Familiares y Universales; Activos y Desempleo), cada uno con su
+# Excel. Se carga lo que traiga cada archivo: no hace falta que estén todos.
+GRUPOS = {
+    'Pasivos': ('P.5.1', 'P.5.2', 'P.5.3', 'P.5.4', 'P.5.5', 'P.5.6'),
+    'Desempleo': ('D.4.1',),
+    'Asignaciones familiares y AUH': ('F.5.1', 'H.4.1', 'H.4.2', 'E.2.1'),
+}
+
+
+def grupos_presentes(t: dict) -> list[str]:
+    return [g for g, cuadros in GRUPOS.items() if all(c in t for c in cuadros)]
+
+
+def extraer(contenido: bytes, informar: list | None = None) -> dict:
     t = tablas(contenido)
-
-    def tabla(codigo):
-        if codigo not in t:
-            raise ValueError(f'falta el cuadro {codigo}')
-        return t[codigo]
-
-    J, HJ, P, HP = (serie_par(tabla(c)) for c in ('P.5.1', 'P.5.2', 'P.5.3', 'P.5.4'))
-    NC, HNC, D = (serie_simple(tabla(c)) for c in ('P.5.5', 'P.5.6', 'D.4.1'))
-    A, U, M, E = (serie_par(tabla(c)) for c in ('F.5.1', 'H.4.1', 'H.4.2', 'E.2.1'))
+    presentes = grupos_presentes(t)
+    if not presentes:
+        raise ValueError('no trae los cuadros de ANSES por provincia (P.5.x, D.4.1, F.5.1, H.4.x, E.2.1)')
+    if informar is not None:
+        informar.extend(presentes)
     datos: dict = {}
-    for p in J:
-        if abs(sum(J[p]['N']) - J[p]['total']) > 1:
-            raise ValueError(f'P.5.1 {p}: la suma de provincias no da el total')
-        v = datos.setdefault(p, {})
-        jf, pf = J[p]['F'], P[p]['F']
-        v['jub_F'] = sum(jf)
-        v['jub_mor_F'] = jf[1]
-        v['jub_haber_F'] = (jf[0] * HJ[p]['F'][0] + jf[1] * HJ[p]['F'][1]) / sum(jf)
-        v['pen_F'] = sum(pf)
-        v['pen_haber_F'] = (pf[0] * HP[p]['F'][0] + pf[1] * HP[p]['F'][1]) / sum(pf)
-        v['jub_N'] = J[p]['total']
-        v['jub_mor_N'] = J[p]['N'][1]
-        v['jub_haber_N'] = HJ[p]['total']
-        v['pen_N'] = P[p]['total']
-        v['pen_haber_N'] = HP[p]['total']
-        for suf in ('F', 'N'):
-            v[f'nc_{suf}'] = NC[p][suf]
-            v[f'nc_haber_{suf}'] = HNC[p][suf]
-            v[f'desempleo_{suf}'] = D[p][suf]
-            v[f'aaff_hijo_{suf}'] = A[p][suf][0]
-            v[f'aaff_disc_{suf}'] = A[p][suf][1]
-            v[f'auh_hijo_{suf}'] = U[p][suf][0]
-            v[f'auh_disc_{suf}'] = U[p][suf][1]
-            v[f'aue_{suf}'] = E[p][suf][0]
-        v['auh_monto_F'] = sum(M[p]['F']) / 1000   # miles de pesos -> millones
-        v['auh_monto_N'] = M[p]['total'] / 1000
+    if 'Pasivos' in presentes:
+        J, HJ, P, HP = (serie_par(t[c]) for c in ('P.5.1', 'P.5.2', 'P.5.3', 'P.5.4'))
+        NC, HNC = (serie_simple(t[c]) for c in ('P.5.5', 'P.5.6'))
+        for p in J:
+            if abs(sum(J[p]['N']) - J[p]['total']) > 1:
+                raise ValueError(f'P.5.1 {p}: la suma de provincias no da el total')
+            v = datos.setdefault(p, {})
+            jf, pf = J[p]['F'], P[p]['F']
+            v['jub_F'] = sum(jf)
+            v['jub_mor_F'] = jf[1]
+            v['jub_haber_F'] = (jf[0] * HJ[p]['F'][0] + jf[1] * HJ[p]['F'][1]) / sum(jf)
+            v['pen_F'] = sum(pf)
+            v['pen_haber_F'] = (pf[0] * HP[p]['F'][0] + pf[1] * HP[p]['F'][1]) / sum(pf)
+            v['jub_N'] = J[p]['total']
+            v['jub_mor_N'] = J[p]['N'][1]
+            v['jub_haber_N'] = HJ[p]['total']
+            v['pen_N'] = P[p]['total']
+            v['pen_haber_N'] = HP[p]['total']
+            for suf in ('F', 'N'):
+                v[f'nc_{suf}'] = NC[p][suf]
+                v[f'nc_haber_{suf}'] = HNC[p][suf]
+    if 'Desempleo' in presentes:
+        D = serie_simple(t['D.4.1'])
+        for p in D:
+            v = datos.setdefault(p, {})
+            for suf in ('F', 'N'):
+                v[f'desempleo_{suf}'] = D[p][suf]
+    if 'Asignaciones familiares y AUH' in presentes:
+        A, U, M, E = (serie_par(t[c]) for c in ('F.5.1', 'H.4.1', 'H.4.2', 'E.2.1'))
+        for p in A:
+            v = datos.setdefault(p, {})
+            for suf in ('F', 'N'):
+                v[f'aaff_hijo_{suf}'] = A[p][suf][0]
+                v[f'aaff_disc_{suf}'] = A[p][suf][1]
+                if p in U:
+                    v[f'auh_hijo_{suf}'] = U[p][suf][0]
+                    v[f'auh_disc_{suf}'] = U[p][suf][1]
+                if p in E:
+                    v[f'aue_{suf}'] = E[p][suf][0]
+            if p in M:
+                v['auh_monto_F'] = sum(M[p]['F']) / 1000   # miles de pesos -> millones
+                v['auh_monto_N'] = M[p]['total'] / 1000
     return datos
 
 
@@ -298,7 +324,8 @@ def recibir_por_telegram() -> tuple[list[str], str | None]:
             ruta_tg = _telegram(token, 'getFile', file_id=doc['file_id'])['file_path']
             with urllib.request.urlopen(f'https://api.telegram.org/file/bot{token}/{ruta_tg}', timeout=120) as r:
                 contenido = r.read()
-            extraer(contenido)  # valida que sea el Excel de Estadísticas de la Seguridad Social
+            partes = []
+            extraer(contenido, partes)  # valida que sea un Excel de Estadísticas de la Seguridad Social
         except Exception as error:  # noqa: BLE001
             try:
                 _telegram(token, 'sendMessage', chat_id=chat['id'],
@@ -313,7 +340,7 @@ def recibir_por_telegram() -> tuple[list[str], str | None]:
         guardados.append(destino.name)
         try:
             _telegram(token, 'sendMessage', chat_id=chat['id'],
-                      text=f'✅ Recibí {nombre}. Lo cargo en el Sheet ahora; te llega el resumen en el aviso de la revisión.')
+                      text=f'✅ Recibí {nombre} ({", ".join(partes)}). Lo cargo en el Sheet ahora; te llega el resumen en el aviso de la revisión.')
         except Exception:  # noqa: BLE001
             pass
     ESTADO_TELEGRAM.parent.mkdir(parents=True, exist_ok=True)
@@ -339,7 +366,9 @@ def recordatorio(ultimo: str) -> str | None:
     ESTADO_TELEGRAM.write_text(json.dumps(estado), encoding='utf-8')
     meses = ('ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic')
     return (f'📥 Ya debería estar el informe de ANSES con datos a {meses[mes_sig - 1]} {anio_sig % 100:02d}: '
-            'bajá el Excel de anses.gob.ar/estudiosyestadisticas (Trimestrales) y mandalo a @Obs_formosa345_bot (por privado o en el grupo).')
+            'bajá el Excel de anses.gob.ar/estudiosyestadisticas y mandalo a @Obs_formosa345_bot (por privado o en el grupo). '
+            'Desde sep-26 ANSES publica tres informes separados (Pasivos; Asignaciones Familiares y Universales; '
+            'Activos y Desempleo): mandá el Excel de cada uno cuando salga.')
 
 
 def main() -> int:
@@ -365,8 +394,8 @@ def main() -> int:
         except Exception as error:  # noqa: BLE001
             fallos.append(f'{ruta.name}: {error}')
             continue
-        for p, v in parcial.items():  # el archivo más nuevo corrige al anterior
-            datos[p] = v
+        for p, v in parcial.items():  # el archivo más nuevo corrige al anterior (solo lo que trae)
+            datos.setdefault(p, {}).update(v)
         usadas.append(ruta.name)
     inicial_json = json.loads((Path(__file__).with_name('anses_2024_2026.json')).read_text(encoding='utf-8'))
     ultimo_cargado = max([*inicial_json['datos'], *(f'{p[0]}-{p[1]:02d}' for p in datos)])

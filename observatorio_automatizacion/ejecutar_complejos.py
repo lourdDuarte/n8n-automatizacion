@@ -286,6 +286,15 @@ def main():
         resumen["notificacion"]["mensaje_telegram"] = armar_mensaje(resumen)
     except Exception as exc:
         resumen["notificacion"]["mensaje_telegram"] = f"⚠️ No se pudo armar el aviso: {exc}"
+    # Word con la descripción para el Observatorio (EMAE, supermercados, pobreza) cuando hay datos nuevos.
+    try:
+        sys.path.insert(0, str(RAIZ / "scripts" / "reportes" / "descripciones"))
+        from generar_descripciones import para_revision
+        resumen["descripciones"], linea = para_revision(resumen)
+        if linea:
+            resumen["notificacion"]["mensaje_telegram"] = (resumen["notificacion"].get("mensaje_telegram") or "") + "\n\n" + linea
+    except Exception as exc:
+        resumen["descripciones"] = [{"estado": "ERROR", "detalle": str(exc)[:300]}]
     guardar_resumen(resumen)
     # n8n debe leer y notificar el diagnóstico también cuando una fuente falla.
     return 0

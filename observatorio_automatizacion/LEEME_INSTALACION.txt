@@ -1,17 +1,108 @@
-Actualización Observatorio - 14/10/2026
-=======================================
-Contenido: carpeta scripts (completa, con las correcciones) + ejecutar_general.py
+Actualización Observatorio (servidor Linux) – 27/10/2026
+========================================================
+Trae, todo junto:
+  1) Avisos de Telegram más cortos (solo lo que se actualizó o dio error) y sector productivo
+     siempre completo y destacado.
+  2) Word con la descripción para el Observatorio + plantilla de WhatsApp, adjunto en Telegram.
+  3) NUEVO: serie de trabajadores SRT desestacionalizada (estimación DAEE), en 3 columnas nuevas
+     del Sheet, que se recalculan solas en cada revisión de la SRT.
+  4) Control de BASE DE DATOS: las fórmulas ya conocidas no se vuelven a avisar cuando se insertan
+     columnas en el Sheet (antes reaparecían, p. ej. las de Ventas en supermercados).
+Contenido: carpeta scripts/ completa + ejecutar_general.py + ejecutar_complejos.py (van en la raíz).
 
-Instalar en Linux (desde la carpeta donde está el zip):
-  1) Respaldo:   cp -r /RUTA/automatizacion_indicadores/scripts /RUTA/automatizacion_indicadores/scripts_respaldo_20261014
-                 cp /RUTA/automatizacion_indicadores/ejecutar_general.py /RUTA/automatizacion_indicadores/ejecutar_general_respaldo_20261014.py
+INSTALAR (desde la carpeta donde está el zip; reemplazar /RUTA por la carpeta real)
+  1) Respaldo:
+       cd /RUTA/automatizacion_indicadores
+       cp -r scripts scripts_respaldo_20261026
+       cp ejecutar_general.py ejecutar_general_respaldo_20261026.py
+       cp ejecutar_complejos.py ejecutar_complejos_respaldo_20261026.py
   2) Descomprimir encima (reemplaza):
-                 unzip -o actualizacion_observatorio_20261014.zip -d /RUTA/automatizacion_indicadores
-  3) Probar:     cd /RUTA/automatizacion_indicadores && python3 ejecutar_general.py   (o una ejecución manual desde n8n)
+       unzip -o actualizacion_observatorio_linux_20261027.zip -d /RUTA/automatizacion_indicadores
+  3) Cambios en n8n: ver n8n_cambios.txt (2 líneas en un nodo + 2 nombres en una lista).
+  4) Probar:
+       cd /RUTA/automatizacion_indicadores
+       python3 scripts/reportes/descripciones/generar_descripciones.py --indicador supermercados --sin-telegram
+         -> crea descripciones/AAAA-MM/Supermercados_<mes><año>.docx
+       python3 scripts/srt/desestacionalizar_srt.py --solo-calcular
+         -> muestra la serie desestacionalizada sin escribir nada
+       python3 ejecutar_general.py      (o una ejecución manual desde n8n)
 
-NO se tocan: config/ (token de Telegram y credenciales), base/, fuentes/, reportes/ ni logs/.
+NO se tocan: base/, fuentes/, reportes/ ni logs/. De config/ solo se agrega config/fuentes_en_otra_pc.txt
+(con eso el servidor deja de revisar ATP, que bloquea al servidor con error 405 y se carga desde la PC;
+el token de Telegram y las credenciales quedan como están). No hace falta instalar nada nuevo (todo usa Python estándar y lo que ya está).
+IMPORTANTE: si la PC de la oficina ya corrió la revisión con esta versión, las columnas nuevas ya
+existen en el Sheet; el servidor las encuentra y solo las mantiene al día (no las duplica).
 
-Notas Linux:
-  - La carpeta de ATP va en minúscula (scripts/atp). Si existe scripts/ATP de una copia anterior, borrarla.
+QUÉ CAMBIA
+1) AVISOS DE TELEGRAM MÁS CORTOS (scripts/comun/mensaje_telegram.py)
+  - La revisión general y la de complejos avisan solo si hay datos nuevos, errores o algo para
+    revisar. Cada indicador actualizado muestra "N de N datos en el Sheet (k nuevos)" y el resto se
+    resume en "🔎 Sin novedades: X indicadores". Si no hay nada nuevo, no se manda mensaje
+    (necesita el cambio de n8n).
+  - Sector productivo (comercialización de granos, actividad pecuaria y producción agrícola):
+    llega SIEMPRE, completo y destacado con cuadros de colores:
+    🟩 dato nuevo · ⬜ sin novedades · 🟥 error · 🟨 pendiente.
+
+2) DESCRIPCIONES PARA EL OBSERVATORIO (scripts/reportes/descripciones/)
+  - Cuando una revisión carga datos nuevos de un indicador publicado en el Observatorio
+    (supermercados, EMAE, IPC, autos y motos, construcción, sector privado, recaudación ATP,
+    transferencias, energía, internet, pobreza e indigencia), se arma un Word con la plantilla
+    para WhatsApp y la "Descripción plataforma". Se guarda en descripciones/AAAA-MM/ y se manda
+    como adjunto al grupo. Lo que la base no tiene (NEA, análisis) queda resaltado en amarillo.
+  - Fuente de prueba: "descripcion_prueba" (arma y manda el de Supermercados del último mes).
+
+3) SRT DESESTACIONALIZADA (scripts/srt/desestacionalizar_srt.py, NUEVO)
+  - La SRT no publica serie sin estacionalidad. Se estima con medias móviles (X-11 simplificado)
+    solo para el TOTAL de trabajadores de Formosa (desde ene 2021). Empleadores y sectores no se
+    desestacionalizan (efecto chico o serie corta e irregular).
+  - Columnas nuevas en BASE DE DATOS, a continuación del bloque SRT:
+      SRT Trabajadores desestacionalizado F (estimación DAEE)   -> número que calcula el programa
+         (no puede ser fórmula de fila: el método usa toda la serie y cada mes nuevo corrige los anteriores)
+      SRT Var % intermensual trabajadores desestacionalizado F (estimación DAEE)  -> fórmula (=AB5/AB4*100-100)
+      SRT Dif intermensual trabajadores desestacionalizado F (estimación DAEE)    -> fórmula (=AB5-AB4)
+    Cada encabezado lleva una nota (pasar el mouse) que explica de dónde sale.
+  - Las crea y las llena la PRIMERA revisión que corra la SRT después de instalar (desde ene 2021).
+    Explicación completa para el equipo: Nota_SRT_desestacionalizada.docx (se manda aparte).
+  - Se recalcula sola después de la fuente "srt" en cada revisión (si no hay mes nuevo no cambia
+    nada). Si falla, el aviso de Telegram trae una línea "⚠️ SRT desestacionalizada ...".
+  - Carga manual: fuente "srt_desestacionalizada".
+  - Datos atípicos que no deben influir en el cálculo: scripts/srt/atipicos_desestacionalizacion.json
+    (hoy: Administración pública jun-25).
+
+4) CONTROL DE BASE DE DATOS (scripts/comun/control_base.py)
+  - La lista de fórmulas "ya conocidas" ahora se compara por fila y fórmula relativa, no por letra de
+    columna. Al insertar las columnas SRT nuevas, la columna de Ventas en supermercados pasó de ND a NG
+    y sus fórmulas (='Ventas en Supermercados'!F..) volvían a aparecer como "fuera de lo estipulado".
+    Con este cambio no se vuelven a avisar. El archivo reportes/control_base/linea_base_formulas.json
+    del servidor se sigue usando tal cual (se adapta solo).
+
+NOTAS LINUX
+  - Usar python3. La carpeta de ATP va en minúscula (scripts/atp); si existe scripts/ATP de una copia
+    anterior, borrarla.
   - Combustibles lee la imagen con OCR. En Linux usa RapidOCR: pip install rapidocr_onnxruntime pillow
   - Dependencias Python: openpyxl, xlrd, google-auth (las mismas que ya usa el sistema).
+
+ATP en el servidor:
+  - La página de la ATP pide verificación anti-robots (captcha) a las consultas que vienen de servidores,
+    por eso el servidor daba error 405. Con config/fuentes_en_otra_pc.txt el servidor deja de revisar ATP
+    y el aviso de Telegram dice "↪️ ATP: no se revisa en este equipo — se carga desde la PC".
+  - ATP se sigue cargando desde la PC (n8n de la PC). Ese archivo NO va en la PC.
+  - Cuando la ATP habilite la IP del servidor, borrar la línea "atp" de ese archivo y el servidor la vuelve a revisar.
+
+GASTO PROVINCIAL (nuevo, octubre 2026)
+  - Fuente oficial: Ministerio de Economía de la Nación, Coordinación Fiscal Provincial,
+    "Gastos por finalidad y función" (Administración Pública No Financiera).
+  - Trimestral, acumulado del año, en millones de pesos. Se carga en marzo, junio,
+    septiembre y diciembre (diciembre = año completo). Formosa (F) y total de provincias (N).
+  - Columnas "Gasto provincial MECON - ...": se agregan solas a continuación del bloque ANSES.
+  - Si falta un trimestre de finalidad y función (ej. I-III 2025), carga solo el gasto total
+    desde "Ejecuciones presupuestarias" del mismo Ministerio (mismo número).
+  - Revisión diaria: fuente "gasto_provincial". Carga completa: "gasto_provincial_historico".
+    Prueba sin escribir: "gasto_provincial_prueba".
+  - Para poder correrlo como "indicador puntual" en n8n: en el nodo "Es indicador general"
+    agregar a la lista 'gasto_provincial','gasto_provincial_historico','gasto_provincial_prueba'
+    (después de 'anses_prueba'). La revisión diaria lo corre igual sin este cambio.
+  - ACTUALIZACIÓN 19/10/2026: el indicador quedó DESACTIVADO (por ahora no se usa). No corre en
+    la revisión diaria y sus columnas se borraron del Sheet (fuente "borrar_gasto_provincial").
+    Se puede volver a cargar a mano con "gasto_provincial_historico" si se decide usarlo.
+

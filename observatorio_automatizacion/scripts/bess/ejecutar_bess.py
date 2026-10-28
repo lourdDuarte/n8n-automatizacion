@@ -148,7 +148,27 @@ def ultimas_ediciones() -> list[str]:
             mejores[tipo] = (clave, m.group(1))
     if len(mejores) < 4:
         raise RuntimeError(f'La página del BESS no muestra los 4 cuadernillos (encontrados: {sorted(mejores)})')
+    ultimas_ediciones.periodos = {t: v[0] for t, v in mejores.items()}
     return [v[1] for v in mejores.values()]
+
+
+NOMBRES_CUADERNILLO = {'pasivos': 'Jubilaciones y pensiones', 'pnc': 'Pensiones no contributivas y PUAM',
+                       'desempleo': 'Desempleo', 'aaff': 'Asignaciones familiares'}
+
+
+def aviso_cuadernillos_atrasados() -> str | None:
+    """Los cuadernillos no siempre salen juntos: avisa cuáles todavía no tienen el último trimestre."""
+    periodos = getattr(ultimas_ediciones, 'periodos', {})
+    if not periodos:
+        return None
+    ultimo = max(periodos.values())
+    atrasados = sorted(t for t, p in periodos.items() if p < ultimo)
+    if not atrasados:
+        return None
+    meses = ('ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic')
+    partes = [f"{NOMBRES_CUADERNILLO[t]} (último publicado: {meses[periodos[t][1] - 1]} {periodos[t][0] % 100:02d})" for t in atrasados]
+    return (f"El BESS de {meses[ultimo[1] - 1]} {ultimo[0] % 100:02d} todavía no publicó: " + '; '.join(partes)
+            + '. Se completa solo cuando salga.')
 
 
 # ------------------------------------------------------------- lectura Excel
@@ -347,6 +367,9 @@ def main() -> int:
     args = ap.parse_args()
 
     archivos = ultimas_ediciones()
+    aviso = aviso_cuadernillos_atrasados()
+    if aviso:
+        print('NOTA_TELEGRAM=' + aviso)
     if args.historico:
         archivos = HISTORICO + [a for a in archivos if a not in HISTORICO]
     datos: dict = {}

@@ -29,10 +29,10 @@ INFORMES_INDEC = {
     'salarios': 'salarios_', 'pobreza': 'eph_pobreza_', 'ipi': 'ipi_manufacturero_',
     'eph': 'mercado_trabajo_eph_', 'pbi': 'pib_',
 }
-DIAS_SIN_NOVEDAD = {'eph': 100, 'pbi': 100, 'bess': 100, 'internet': 100, 'pobreza': 190}
+DIAS_SIN_NOVEDAD = {'eph': 100, 'pbi': 100, 'bess': 100, 'gasto_provincial': 200, 'internet': 100, 'pobreza': 190}
 DIAS_MENSUAL = 38
 # Fuentes que no son indicadores con calendario propio, o que ya tienen su recordatorio.
-NO_VIGILAR = {'control_base', 'anses', 'estimaciones', 'ieric_correccion', 'correccion_transferencias',
+NO_VIGILAR = {'control_base', 'anses', 'gasto_provincial', 'estimaciones', 'ieric_correccion', 'correccion_transferencias',
               'limpieza_motos'}
 
 

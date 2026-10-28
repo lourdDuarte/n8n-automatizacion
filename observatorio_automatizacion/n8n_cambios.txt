@@ -1,0 +1,18 @@
+CAMBIOS EN n8n (servidor)
+=========================
+A) Nodo "Preparar mensaje Telegram" (para que no se mande nada cuando no hay novedades)
+   1) Abrir el flujo de la automatización en el n8n del servidor.
+   2) Doble clic en el nodo de código "Preparar mensaje Telegram".
+   3) Debajo de donde ya están armadas las variables "aviso" y "errores" (antes de que se arme el
+      texto del mensaje), pegar:
+
+    const sinNovedades = aviso.notificacion && aviso.notificacion.mensaje_telegram === '';
+    if (sinNovedades && !errores.length) { return []; }
+
+   Criterio: si notificacion.mensaje_telegram llega vacío ('') y no hay errores, el nodo devuelve []
+   y no se envía nada.
+
+B) Nodo IF "Es indicador general" (para poder correrlos a mano desde "Elegir indicador puntual")
+   Agregar a la lista de fuentes: 'descripcion_prueba', 'srt_desestacionalizada'
+
+C) Guardar el flujo (Ctrl+S).

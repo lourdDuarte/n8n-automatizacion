@@ -36,8 +36,36 @@ PROVINCIA = '18_for|Formosa'
 CARPETA = RAIZ / 'fuentes' / 'srt'
 MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto',
          'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-TOTAL_TRABAJADORES = 'SRT Evolución Cantidad de Trabajadores'
-TOTAL_EMPLEADORES = 'SRT Evolución Cantidad de Empleadores '
+TOTAL_TRABAJADORES = 'SRT Evolución Cantidad de Trabajadores F'
+TOTAL_EMPLEADORES = 'SRT Evolución Cantidad de Empleadores F'
+# Nombres anteriores (antes de octubre 2026 los totales no llevaban la "F"). Si el Excel local
+# todavía los tiene, se renombran para que coincidan con el Sheet.
+NOMBRES_ANTERIORES = {
+    'SRT Evolución Cantidad de Trabajadores': TOTAL_TRABAJADORES,
+    'SRT Evolución Cantidad de Empleadores': TOTAL_EMPLEADORES,
+}
+
+
+def alinear_encabezados_locales(base: Path) -> list[str]:
+    """Renombra en el Excel local los encabezados SRT que cambiaron de nombre en el Sheet."""
+    from openpyxl import load_workbook
+    libro = load_workbook(base, data_only=False, keep_links=True)
+    try:
+        ws = libro['BASE DE DATOS']
+        existentes = {normalizar_titulo(c.value) for c in ws[1] if c.value}
+        cambiados = []
+        for celda in ws[1]:
+            if not celda.value:
+                continue
+            for viejo, nuevo in NOMBRES_ANTERIORES.items():
+                if normalizar_titulo(celda.value) == normalizar_titulo(viejo) and normalizar_titulo(nuevo) not in existentes:
+                    cambiados.append(f'{celda.coordinate}: {celda.value!r} -> {nuevo!r}')
+                    celda.value = nuevo
+        if cambiados:
+            libro.save(base)
+        return cambiados
+    finally:
+        libro.close()
 # Sector del boletín -> encabezado de la base.
 SECTORES = {
     'Agricultura, ganadería, caza, silvicultura y pesca': 'SRT Agricultura, ganadería, caza, silvicultura y pesca F',
@@ -159,6 +187,9 @@ def main() -> int:
         if not m:
             raise ValueError('--desde debe tener el formato AAAA-MM')
         historico = (int(m.group(1)), int(m.group(2)))
+    renombrados = alinear_encabezados_locales(args.base)
+    if renombrados:
+        print('ENCABEZADOS_RENOMBRADOS=' + '; '.join(renombrados))
     ultimo = ultimo_periodo_cargado(args.base, TOTAL_TRABAJADORES)
     if ultimo is None:
         raise ValueError('La base no tiene ningún mes de SRT cargado')

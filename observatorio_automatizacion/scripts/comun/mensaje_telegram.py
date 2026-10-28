@@ -63,21 +63,42 @@ def _conteo(sheet: dict) -> dict:
             'escritas': escritas, 'formula': len(por_formula), 'motivos': motivos}
 
 
-def armar_mensaje(resumen: dict, extra_por_fuente: dict | None = None) -> str:
-    """resumen: el de cualquiera de los tres ejecutores, con 'sheet_directo' si existe.
+PRODUCTIVOS = {'comercializacion', 'pecuaria', 'estimaciones'}
+# Palabras del encabezado de la hoja de productivos -> qué se actualizó, en criollo.
+TEMAS_PRODUCTIVOS = [('porcino', 'porcinos'), ('bovino', 'bovinos'), ('aves', 'aves'), ('huevo', 'aves'),
+                     ('proteina', 'consumo de carnes'), ('consumo', 'consumo de carnes'),
+                     ('maiz', 'maíz'), ('sorgo', 'sorgo'), ('soja', 'soja'), ('trigo', 'trigo'),
+                     ('sembrada', 'superficie sembrada'), ('cosechada', 'superficie cosechada'),
+                     ('produccion', 'producción por cultivo'), ('participacion', 'producción por cultivo')]
 
-    Por indicador dice: si hubo datos nuevos, cuántos datos del período están en el
-    Sheet (por ejemplo 10 de 10) y, si falta alguno, por qué.
-    """
-    extra_por_fuente = extra_por_fuente or {}
+
+def _sin_tildes(texto) -> str:
+    import unicodedata
+    s = unicodedata.normalize('NFD', str(texto or '').lower())
+    return ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+
+
+def _temas(sheet: dict | None) -> str:
+    """De los títulos de las celdas escritas saca 'porcinos, aves', 'maíz, soja', etc."""
+    vistos = []
+    for cambio in (sheet or {}).get('cambios') or []:
+        titulo = _sin_tildes(cambio.get('titulo'))
+        for clave, tema in TEMAS_PRODUCTIVOS:
+            if clave in titulo and tema not in vistos:
+                vistos.append(tema)
+                break
+    return ', '.join(vistos)
+
+
+def _revisar(resumen: dict, extra_por_fuente: dict) -> tuple[list[dict], list[str]]:
+    """Una entrada por indicador (tipo: nuevo, sin, pend, err, omit) y los avisos generales."""
     por_fuente = (resumen.get('sheet_directo') or {}).get('por_fuente', {})
-    lineas, avisos = [], []
     try:  # aviso si el organismo publicó y no se encontró el dato (p. ej. cambió el nombre del archivo)
         import vigilancia_fuentes
         vigilancia = vigilancia_fuentes.revisar(resumen.get('resultados', []))
     except Exception:  # noqa: BLE001 - la vigilancia nunca frena el aviso
         vigilancia = {}
-    cuenta = {'nuevos': 0, 'sin': 0, 'pend': 0, 'err': 0, 'incompletos': 0}
+    items, avisos = [], []
     for r in resumen.get('resultados', []):
         nombre = _limpio(r.get('nombre') or r.get('fuente'), 80)
         fuente = r.get('fuente')
@@ -85,42 +106,34 @@ def armar_mensaje(resumen: dict, extra_por_fuente: dict | None = None) -> str:
         estado = r.get('estado')
         escritas = int(r.get('celdas_actualizadas') or 0)
         periodo = _periodo(r, sheet)
-        de_periodo = f' ({periodo})' if periodo else ''
+        it = {'fuente': fuente, 'nombre': nombre, 'periodo': periodo, 'conteo': '', 'faltan': '', 'notas': [],
+              'escritas': 0, 'temas': ''}
         if estado == 'ERROR':
-            cuenta['err'] += 1
-            linea = f'❌ {nombre}: no se actualizó. Motivo: {_motivo_error(r)}'
+            it.update(tipo='err', motivo=_motivo_error(r))
+        elif estado == 'OMITIDA':
+            it.update(tipo='omit', motivo=_limpio(r.get('detalle'), 200))
         elif estado == 'PENDIENTE':
-            cuenta['pend'] += 1
-            linea = f'⏳ {nombre}: el organismo todavía no publicó el período siguiente.'
+            it.update(tipo='pend')
         elif sheet is not None and (sheet.get('esperadas') or sheet.get('verificadas') is not None):
             c = _conteo(sheet)
-            total = f"{c['en_sheet']} de {c['esperadas']} datos en el Sheet" if c['esperadas'] else 'datos verificados en el Sheet'
-            if c['escritas']:
-                cuenta['nuevos'] += 1
-                linea = f"✅ {nombre}{de_periodo}: datos nuevos cargados — {total} ({c['escritas']} escritos ahora)."
-            else:
-                cuenta['sin'] += 1
-                linea = f'🔎 {nombre}{de_periodo}: sin datos nuevos — {total}.'
-            if c['formula']:
-                linea += f" {c['formula']} los calcula el Sheet con su fórmula."
+            it['conteo'] = f"{c['en_sheet']} de {c['esperadas']}" if c['esperadas'] else ''
+            it['escritas'] = c['escritas']
+            it['tipo'] = 'nuevo' if c['escritas'] else 'sin'
+            it['temas'] = _temas(sheet) if fuente in PRODUCTIVOS else ''
             if c['motivos'] or (c['esperadas'] and c['en_sheet'] < c['esperadas']):
-                cuenta['incompletos'] += 1
                 faltan = c['esperadas'] - c['en_sheet']
-                linea += f'\n   ⚠️ Faltan {faltan}: ' + ('; '.join(c['motivos']) if c['motivos'] else 'motivo no informado por el ejecutor') + '.'
+                it['faltan'] = (f'faltan {faltan}: ' if faltan > 0 else '') + ('; '.join(c['motivos']) if c['motivos'] else 'motivo no informado')
         elif escritas > 0:
-            cuenta['nuevos'] += 1
-            linea = f'✅ {nombre}: datos nuevos de {periodo} ({escritas} celdas).'
+            it.update(tipo='nuevo', escritas=escritas)
         else:
-            cuenta['sin'] += 1
-            linea = f'🔎 {nombre}: verificado, sin datos nuevos' + (f' (último: {periodo}).' if periodo else '.')
+            it['tipo'] = 'sin'
         if extra_por_fuente.get(fuente):
-            linea += ' ' + extra_por_fuente[fuente]
-        # Notas que la fuente pide mostrar (p. ej. recordatorio de ANSES).
+            it['notas'].append(extra_por_fuente[fuente])
         for nota in re.findall(r'^NOTA_TELEGRAM=(.+)$', str(r.get('salida_final') or ''), re.M):
-            linea += '\n   ' + _limpio(nota, 300)
+            it['notas'].append(_limpio(nota, 300))
         if vigilancia.get(fuente) and estado != 'ERROR':
-            linea += '\n   ' + vigilancia[fuente]
-        lineas.append(linea)
+            it['vigilancia'] = vigilancia[fuente]
+        items.append(it)
         if sheet and sheet.get('reparadas'):
             avisos.append(f"🛠️ {nombre}: {sheet['reparadas']} celdas de meses anteriores corregidas en el Sheet "
                           "(estaban mal ubicadas o con fórmulas rotas).")
@@ -158,26 +171,130 @@ def armar_mensaje(resumen: dict, extra_por_fuente: dict | None = None) -> str:
     formato = resumen.get('formato_sheet') or {}
     if formato.get('estado') == 'ERROR' and formato.get('detalle'):
         avisos.append('⚠️ formato_sheet: ' + _limpio(formato['detalle'], 250))
-    if cuenta['err']:
-        titulo = '⚠️ REVISIÓN COMPLETADA — CON ERRORES'
-    elif cuenta['incompletos']:
-        titulo = '⚠️ REVISIÓN COMPLETADA — HAY DATOS SIN CARGAR'
-    elif cuenta['nuevos']:
-        titulo = '✅ REVISIÓN COMPLETADA — DATOS NUEVOS CARGADOS'
-    else:
-        titulo = '🔎 REVISIÓN COMPLETADA — SIN NOVEDADES'
+    return items, avisos
+
+
+def _fecha(resumen: dict) -> str:
     try:
-        fecha = datetime.fromisoformat(str(resumen.get('fin') or resumen.get('inicio')))
+        f = datetime.fromisoformat(str(resumen.get('fin') or resumen.get('inicio')))
     except ValueError:
-        fecha = datetime.now()
-    resumen_linea = (f"Revisados: {len(lineas)} · nuevos: {cuenta['nuevos']} · sin novedades: {cuenta['sin']}"
-                     f" · pendientes: {cuenta['pend']} · con error: {cuenta['err']}")
-    partes = [titulo, '', f'Fecha: {fecha.day}/{fecha.month}/{fecha.year}, {fecha:%H:%M:%S}', resumen_linea]
-    for linea in lineas + avisos:
-        partes += ['', linea]
-    mensaje = '\n'.join(partes)
-    if len(mensaje) > LIMITE:
-        mensaje = mensaje[:LIMITE - 40] + '\n\n…mensaje abreviado.'
-    # Telegram se envía en modo HTML: se escapan <, > y &.
+        f = datetime.now()
+    return f'{f.day}/{f.month} {f:%H:%M}'
+
+
+def _e(texto) -> str:
     import html
-    return html.escape(mensaje, quote=False)
+    return html.escape(str(texto or ''), quote=False)
+
+
+def _corto(it: dict) -> str:
+    """Una línea por indicador con novedades o con algo que mirar (texto ya escapado para HTML)."""
+    p = f' ({_e(it["periodo"])})' if it['periodo'] else ''
+    if it['tipo'] == 'err':
+        linea = f'❌ <b>{_e(it["nombre"])}</b>: no se actualizó — {_e(it["motivo"])}'
+    elif it['tipo'] == 'pend':
+        linea = f'⏳ <b>{_e(it["nombre"])}</b>: todavía no se publicó el período siguiente'
+    elif it['tipo'] == 'omit':
+        linea = f'↪️ <b>{_e(it["nombre"])}</b>: no se revisa en este equipo — {_e(it["motivo"])}'
+    elif it['tipo'] == 'nuevo':
+        linea = f'✅ <b>{_e(it["nombre"])}</b>{p}: ' + (f'{it["conteo"]} datos en el Sheet ({it["escritas"]} nuevos)' if it['conteo'] else f'{it["escritas"]} datos nuevos')
+    elif it['faltan']:  # sin novedades pero incompleto
+        linea = f'⚠️ <b>{_e(it["nombre"])}</b>{p}: {it["conteo"]} datos en el Sheet'
+    else:  # sin novedades, con un aviso de la fuente
+        linea = f'🔎 <b>{_e(it["nombre"])}</b>{p}: sin novedades' + (f' — {it["conteo"]} datos en el Sheet' if it['conteo'] else '')
+    if it['faltan']:
+        linea += f' — {_e(it["faltan"])}'
+    if it['tipo'] in ('nuevo', 'err') or it['faltan'] or it.get('mostrar'):
+        for nota in it['notas']:
+            linea += f'\n   {_e(nota)}'
+    if it.get('vigilancia'):
+        linea += f'\n   {_e(it["vigilancia"])}'
+    return linea
+
+
+def _mensaje_general(resumen: dict, items: list[dict], avisos: list[str]) -> str:
+    """Revisión general y complejos: solo lo que cambió o hay que mirar. Si no hay nada, no se manda ('')."""
+    nuevos = [i for i in items if i['tipo'] == 'nuevo']
+    errores = [i for i in items if i['tipo'] == 'err']
+    incompletos = [i for i in items if i['tipo'] == 'sin' and i['faltan']]
+    # Sin novedades pero con algo para mirar: vigilancia de la fuente, una nota de alerta (⚠️/❌)
+    # o una corrida puntual de un solo indicador (desde n8n, siempre se avisa).
+    puntual = len(items) == 1
+    vigilados = []
+    for i in items:
+        if i['tipo'] in ('sin', 'pend', 'omit') and not i['faltan'] and (
+                i.get('vigilancia') or puntual or any(n.lstrip()[:1] in '⚠❌🚨' for n in i['notas'])):
+            i['mostrar'] = True
+            vigilados.append(i)
+    if not (nuevos or errores or incompletos or vigilados or avisos):
+        return ''
+    if errores:
+        titulo = '⚠️ <b>Revisión con errores</b>'
+    elif incompletos:
+        titulo = '⚠️ <b>Hay datos sin cargar</b>'
+    elif nuevos:
+        titulo = '✅ <b>Datos nuevos en el Sheet</b>'
+    else:
+        titulo = '👀 <b>Revisión: algo para mirar</b>'
+    partes = [f'{titulo} · {_fecha(resumen)}']
+    partes += [_corto(i) for i in nuevos + errores + incompletos + vigilados]
+    sin = sum(1 for i in items if i['tipo'] == 'sin' and not i['faltan'] and i not in vigilados)
+    sin_txt = f'{sin} indicador' + ('es' if sin != 1 else '')
+    pend = sum(1 for i in items if i['tipo'] == 'pend' and i not in vigilados)
+    otra = sum(1 for i in items if i['tipo'] == 'omit')
+    resto = [f'sin novedades: {sin_txt}'] if sin else []
+    resto += [f'sin publicar aún: {pend}'] if pend else []
+    resto += [f'en otra PC: {otra}'] if otra else []
+    if resto:
+        partes.append('🔎 ' + ' · '.join(resto).capitalize())
+    # Notas informativas de las demás fuentes: solo viajan si igual se manda el mensaje.
+    otras = [f'📌 {_e(i["nombre"])}: {_e(n)}' for i in items if not i.get('mostrar') and i['tipo'] == 'sin' and not i['faltan']
+             for n in i['notas']]
+    partes += otras[:5]
+    partes += [_e(a) for a in avisos]
+    return '\n'.join(partes)
+
+
+def _mensaje_productivos(resumen: dict, items: list[dict], avisos: list[str]) -> str:
+    """Productivos (hoja aparte, la carga otra persona del equipo): siempre completo y destacado."""
+    hubo = any(i['tipo'] == 'nuevo' for i in items)
+    partes = [f'🌾🐄 <b>SECTOR PRODUCTIVO</b> · {_fecha(resumen)}',
+              '<i>Hoja «BASE DE DATOS - Indicadores Productivos»</i>']
+    lineas = []
+    for it in items:
+        p = f' ({_e(it["periodo"])})' if it['periodo'] else ''
+        n = f'<b>{_e(it["nombre"])}</b>{p}'
+        if it['tipo'] == 'err':
+            linea = f'🟥 {n}: no se actualizó — {_e(it["motivo"])}'
+        elif it['tipo'] == 'pend':
+            linea = f'🟨 {n}: todavía no se publicó el período siguiente'
+        elif it['tipo'] == 'nuevo':
+            que = f' de {_e(it["temas"])}' if it['temas'] else ''
+            linea = f'🟩 {n}: <b>datos nuevos{que}</b>' + (f' · {it["conteo"]} en el Sheet' if it['conteo'] else '')
+        else:
+            linea = f'⬜ {n}: sin novedades' + (f' · {it["conteo"]} en el Sheet' if it['conteo'] else '')
+        if it['faltan']:
+            linea += f'\n   ⚠️ {_e(it["faltan"])}'
+        for nota in it['notas']:
+            linea += f'\n   {_e(nota)}'
+        lineas.append(linea)
+    partes.append('<blockquote>' + '\n'.join(lineas) + '</blockquote>')
+    partes.append('✅ Hubo actualización.' if hubo else '🔎 Sin cambios en esta revisión.')
+    partes += [_e(a) for a in avisos]
+    return '\n'.join(partes)
+
+
+def armar_mensaje(resumen: dict, extra_por_fuente: dict | None = None) -> str:
+    """Aviso de Telegram (HTML) de cualquiera de los tres ejecutores.
+
+    General y complejos: corto, solo lo que se actualizó o hay que mirar ('15 de 15 datos en el Sheet').
+    Si no hubo nada, devuelve '' y n8n no manda mensaje.
+    Productivos: siempre completo y destacado, se haya actualizado o no.
+    """
+    items, avisos = _revisar(resumen, extra_por_fuente or {})
+    productivos = bool(items) and all(i['fuente'] in PRODUCTIVOS for i in items)
+    mensaje = (_mensaje_productivos if productivos else _mensaje_general)(resumen, items, avisos)
+    if len(mensaje) > LIMITE:
+        # Se corta sin romper etiquetas: se quita el formato del tramo final.
+        mensaje = re.sub(r'</?(b|i|blockquote)>', '', mensaje)[:LIMITE - 40] + '\n\n…mensaje abreviado.'
+    return mensaje
