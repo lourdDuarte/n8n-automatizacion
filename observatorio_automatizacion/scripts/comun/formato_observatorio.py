@@ -2,6 +2,7 @@
 
 from datetime import date, timedelta
 import os
+import time
 import re
 import unicodedata
 
@@ -198,9 +199,18 @@ def preparar_formatos(actualizaciones):
     )
 
     def pedir(url, **opciones):
-        respuesta = sesion.get(url, timeout=45, **opciones)
-        respuesta.raise_for_status()
-        return respuesta.json()
+        # El Sheet es grande: se lee solo lo necesario y con reintentos (antes se leía toda la
+        # hoja con formatos y a veces la API tardaba más de 45 s: "Read timed out").
+        ultimo = None
+        for intento in range(3):
+            try:
+                respuesta = sesion.get(url, timeout=120, **opciones)
+                respuesta.raise_for_status()
+                return respuesta.json()
+            except Exception as error:  # noqa: BLE001
+                ultimo = error
+                time.sleep(5 * (intento + 1))
+        raise ultimo
 
     meta = pedir(
         API,
@@ -220,31 +230,34 @@ def preparar_formatos(actualizaciones):
     limite = hoja["gridProperties"]["rowCount"]
     ancho = hoja["gridProperties"]["columnCount"]
 
-    datos = pedir(
-        API,
-        params={
-            "ranges": f"'{HOJA}'!A1:{_letra(ancho)}{limite}",
-            "includeGridData": "true",
-            "fields": (
-                "sheets(data(startRow,rowData(values("
-                "userEnteredValue,effectiveValue,"
-                "userEnteredFormat.numberFormat))))"
-            ),
-        },
-    )
+    def leer_bloques(rangos):
+        datos = pedir(
+            API,
+            params={
+                "ranges": rangos,
+                "includeGridData": "true",
+                "fields": (
+                    "sheets(data(startRow,rowData(values("
+                    "userEnteredValue,effectiveValue,"
+                    "userEnteredFormat.numberFormat))))"
+                ),
+            },
+        )
+        filas = {}
+        for bloque in datos["sheets"][0].get("data", []):
+            inicio = bloque.get("startRow", 0)
+            for desplazamiento, fila in enumerate(
+                bloque.get("rowData", [])
+            ):
+                filas[inicio + desplazamiento + 1] = fila.get(
+                    "values", []
+                )
+        return filas
 
-    filas = {}
-    for bloque in datos["sheets"][0].get("data", []):
-        inicio = bloque.get("startRow", 0)
-        for desplazamiento, fila in enumerate(
-            bloque.get("rowData", [])
-        ):
-            filas[inicio + desplazamiento + 1] = fila.get(
-                "values", []
-            )
-
+    # 1) Solo la columna A para ubicar los períodos.
+    columna_a = leer_bloques([f"'{HOJA}'!A1:A{limite}"])
     periodos = {}
-    for numero, celdas in filas.items():
+    for numero, celdas in columna_a.items():
         if not celdas:
             continue
         periodo = _fecha(
@@ -276,10 +289,25 @@ def preparar_formatos(actualizaciones):
             if _clave(titulo) != "periodo"
             and not str(titulo).startswith("__")
         )
+    if not destinos:
+        return {"estado": "NO_REQUERIDO", "celdas": 0}
 
-    solicitudes = solicitudes_formato(
-        filas, filas.get(1, []), destinos, hoja["sheetId"]
-    )
+    # 2) Encabezados + las filas a formatear y los 3 años anteriores (de donde se copia el
+    #    formato). Si ahí no hay un formato de referencia, se lee la hoja completa.
+    desde = max(2, min(destinos) - 36)
+    rangos = [f"'{HOJA}'!A1:{_letra(ancho)}1", f"'{HOJA}'!A{desde}:{_letra(ancho)}{max(destinos)}"]
+    filas = leer_bloques(rangos)
+    try:
+        solicitudes = solicitudes_formato(
+            filas, filas.get(1, []), destinos, hoja["sheetId"]
+        )
+    except ValueError as error:
+        if "Sin formato numérico histórico" not in str(error) or desde == 2:
+            raise
+        filas = leer_bloques([f"'{HOJA}'!A1:{_letra(ancho)}{max(destinos)}"])
+        solicitudes = solicitudes_formato(
+            filas, filas.get(1, []), destinos, hoja["sheetId"]
+        )
 
     for inicio in range(0, len(solicitudes), 200):
         respuesta = sesion.post(

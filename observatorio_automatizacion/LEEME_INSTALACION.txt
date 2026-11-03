@@ -1,14 +1,34 @@
-Actualización Observatorio (servidor Linux) – 27/10/2026
-========================================================
+Actualización Observatorio (servidor Linux) – 29/10/2026 (versión 4, 03/11)
+==========================================================================
 Trae, todo junto:
   1) Avisos de Telegram más cortos (solo lo que se actualizó o dio error) y sector productivo
      siempre completo y destacado.
   2) Word con la descripción para el Observatorio + plantilla de WhatsApp, adjunto en Telegram.
-  3) NUEVO: serie de trabajadores SRT desestacionalizada (estimación DAEE), en 3 columnas nuevas
-     del Sheet, que se recalculan solas en cada revisión de la SRT.
-  4) Control de BASE DE DATOS: las fórmulas ya conocidas no se vuelven a avisar cuando se insertan
-     columnas en el Sheet (antes reaparecían, p. ej. las de Ventas en supermercados).
-Contenido: carpeta scripts/ completa + ejecutar_general.py + ejecutar_complejos.py (van en la raíz).
+  3) Serie de trabajadores SRT desestacionalizada (estimación DAEE), en 3 columnas del Sheet.
+  4) Control de BASE DE DATOS: las fórmulas ya conocidas no se vuelven a avisar.
+  5) Arreglos del 29/10: IERIC N° 252 ("sept-26"), "formato_sheet" en SIPA/IPI y fórmulas de
+     supermercados de meses nuevos.
+  6) NUEVO (29/10 noche):
+     - Columnas calculadas del Sheet (variaciones, acumulados): cuando se carga un mes, la fórmula
+       del mes anterior se arrastra sola a la fila nueva (solo en celdas vacías; nunca pisa nada).
+       Ej.: variaciones de Ventas en supermercados, variación mensual del maíz.
+     - DNRPA: se informa como dato nuevo (con Word y plantilla) solo cuando entra el mes completo
+       (8 de 8). Los ajustes de 1 o 2 valores de Nación ya no se anuncian como novedad.
+     - Sector pecuario: Word con descripción + plantilla de WhatsApp para Bovinos, Porcinos y Aves
+       cuando entran datos nuevos de esa especie, y de Consumo cuando el mes tiene las tres carnes.
+     - Producción agrícola (Estimaciones MAGyP): Word con descripción + plantilla de WhatsApp de
+       UN cultivo por vez (el que tuvo datos nuevos, p. ej. solo soja 2025/26), no todo junto.
+     - Revisión general más rápida (en la PC bajó de unos 10 a unos 4,5 minutos): las fuentes que no
+       usan el Excel local (EPH, transferencias, BESS, ANSES, becas) corren en paralelo; si una fuente
+       no trajo nada nuevo no se recalcula el Excel; y el Sheet se lee una sola vez para escribir.
+       El resumen trae "tiempos_segundos" con lo que tardó cada parte.
+     - SRT desestacionalizada: se recalcula solo cuando la SRT carga datos nuevos.
+     - Comercialización de granos: Word con descripción + plantilla de WhatsApp cuando entra un mes nuevo.
+       Si los precios internos del mes son iguales a los del mes anterior en los 4 cultivos (dato copiado),
+       no arma el Word y avisa para revisar la carga.
+     - Telegram: reintento automático del envío (ver n8n_cambios.txt, punto C).
+Contenido: carpeta scripts/ completa + ejecutar_general.py + ejecutar_complejos.py +
+ejecutar_productivos.py (van en la raíz).
 
 INSTALAR (desde la carpeta donde está el zip; reemplazar /RUTA por la carpeta real)
   1) Respaldo:
@@ -16,9 +36,10 @@ INSTALAR (desde la carpeta donde está el zip; reemplazar /RUTA por la carpeta r
        cp -r scripts scripts_respaldo_20261026
        cp ejecutar_general.py ejecutar_general_respaldo_20261026.py
        cp ejecutar_complejos.py ejecutar_complejos_respaldo_20261026.py
+       cp ejecutar_productivos.py ejecutar_productivos_respaldo_20261029.py
   2) Descomprimir encima (reemplaza):
-       unzip -o actualizacion_observatorio_linux_20261027.zip -d /RUTA/automatizacion_indicadores
-  3) Cambios en n8n: ver n8n_cambios.txt (2 líneas en un nodo + 2 nombres en una lista).
+       unzip -o actualizacion_observatorio_linux_20261103.zip -d /RUTA/automatizacion_indicadores
+  3) Cambios en n8n: ver n8n_cambios.txt (2 líneas en un nodo + 2 nombres en una lista + reintento del envío de Telegram).
   4) Probar:
        cd /RUTA/automatizacion_indicadores
        python3 scripts/reportes/descripciones/generar_descripciones.py --indicador supermercados --sin-telegram
@@ -75,6 +96,17 @@ QUÉ CAMBIA
     y sus fórmulas (='Ventas en Supermercados'!F..) volvían a aparecer como "fuera de lo estipulado".
     Con este cambio no se vuelven a avisar. El archivo reportes/control_base/linea_base_formulas.json
     del servidor se sigue usando tal cual (se adapta solo).
+
+5) ARREGLOS DEL 29/10/2026
+  - scripts/ieric/ejecutar_ieric.py: el Cuadro II del informe N° 252 encabeza los meses como "sept-26"
+    (antes "sep-26"). Ahora acepta sep, sept y set. Error que daba: "No se identifica un encabezado
+    mensual único para empresas".
+  - scripts/comun/formato_observatorio.py: para dar formato a las celdas nuevas se leía la hoja completa
+    con formatos y a veces la API de Google tardaba más de 45 s ("Read timed out" -> error
+    "formato_sheet" en SIPA e IPI). Ahora lee solo la columna A, los encabezados y las filas necesarias,
+    con 120 s de espera y 3 reintentos.
+  - scripts/comun/control_base.py: si el equipo arrastra hacia abajo una fórmula ya conocida (p. ej.
+    Ventas en supermercados ='Ventas en Supermercados'!F68 en junio 26), los meses nuevos no se avisan.
 
 NOTAS LINUX
   - Usar python3. La carpeta de ATP va en minúscula (scripts/atp); si existe scripts/ATP de una copia

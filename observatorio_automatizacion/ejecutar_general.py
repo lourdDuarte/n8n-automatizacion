@@ -6,14 +6,21 @@ import os
 import re
 import subprocess
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 RAIZ = Path(__file__).resolve().parent
 MOTOR = Path(__file__).resolve()
 DESTINO = RAIZ / 'salidas_n8n' / 'resumen_general.json'
 # Fuentes que solo se corren a mano (no entran en 'todas').
-FUENTES_MANUALES = ['srt_historico', 'ieric_correccion', 'correccion_transferencias', 'limpieza_motos', 'control_base', 'bess_historico', 'bess_prueba', 'anses_historico', 'anses_prueba', 'gasto_provincial', 'gasto_provincial_historico', 'gasto_provincial_prueba', 'borrar_gasto_provincial', 'becas_historico', 'becas_prueba', 'descripcion_prueba', 'srt_desestacionalizada']
+FUENTES_MANUALES = ['srt_historico', 'ieric_correccion', 'correccion_transferencias', 'limpieza_motos', 'control_base', 'bess_historico', 'bess_prueba', 'anses_historico', 'anses_prueba', 'gasto_provincial', 'gasto_provincial_historico', 'gasto_provincial_prueba', 'borrar_gasto_provincial', 'becas_historico', 'becas_prueba', 'descripcion_prueba', 'descripcion_soja', 'descripcion_pecuario', 'comparar_transferencias', 'srt_desestacionalizada']
 FUENTES = ['eph', 'pbi', 'iaraf', 'atp', 'canasta', 'sipa', 'ipi', 'cammesa', 'dnrpa', 'ieric', 'ipc', 'internet', 'transferencias_fiscales', 'srt', 'combustibles', 'bess', 'anses', 'becas']
+
+# Fuentes que no abren el Excel local (descargan y se cargan directo en el Sheet): pueden correr en paralelo.
+SIN_EXCEL_LOCAL = {'eph', 'transferencias_fiscales', 'bess', 'anses', 'becas'}
+REGISTRO = {}
+
 
 def ahora():
     return datetime.now().astimezone().isoformat(timespec='seconds')
@@ -39,6 +46,12 @@ def guardar(resumen):
     DESTINO.parent.mkdir(parents=True, exist_ok=True)
     temporal = DESTINO.with_name(f'resumen_general_{os.getpid()}.tmp')
     temporal.write_text(json.dumps(resumen, ensure_ascii=False), encoding='utf-8')
+    for intento in range(5):  # en Windows falla si otro proceso está reemplazando el archivo en ese instante
+        try:
+            temporal.replace(DESTINO)
+            return
+        except PermissionError:
+            time.sleep(0.5 * (intento + 1))
     temporal.replace(DESTINO)
 
 def interpretar(salida):
@@ -184,8 +197,11 @@ def main():
         return 0
     if args.solo_finalizar:
         return subprocess.call([sys.executable, '-u', str(MOTOR), '--motor-interno', '--solo-finalizar'], cwd=RAIZ)
+    t0 = time.monotonic()
+    tiempos = {}
     seleccion = list(FUENTES) if args.fuentes.strip().lower() == 'todas' else list(dict.fromkeys((x.strip().lower() for x in args.fuentes.split(',') if x.strip())))
     resumen = {'version_ejecutor': 'GENERAL_CONTINUO_V1', 'inicio': ahora(), 'fin': None, 'estado': 'EN_CURSO', 'solicitadas': seleccion, 'ejecutadas': [], 'errores': [], 'omitidas': [], 'resultados': [], 'actualizaciones_google': [], 'notificacion': {'hubo_cambios': False, 'total_celdas_actualizadas': 0, 'fuentes_modificadas': [], 'cambios_locales_no_confirmados_en_sheet': True}}
+    REGISTRO['resumen'] = resumen
     logs = RAIZ / 'logs' / 'general_continuo' / datetime.now().strftime('%Y%m%d_%H%M%S_%f')
     logs.mkdir(parents=True, exist_ok=True)
     # Control de BASE DE DATOS: cálculos o valores fuera de lugar (meses futuros,
@@ -207,9 +223,18 @@ def main():
         resumen['espejo_sheet'] = {'estado': 'ERROR', 'detalle': str(error)}
     print('ESPEJO_SHEET=' + json.dumps(resumen['espejo_sheet'], ensure_ascii=False, default=str)[:2000], flush=True)
     guardar(resumen)
+    tiempos['antes_de_fuentes'] = round(time.monotonic() - t0, 1)
+    externas = fuentes_en_otra_pc()
+    # Las fuentes que NO usan el Excel local (descargan y se cargan directo en el Sheet) corren en paralelo
+    # mientras las demás siguen de a una (esas sí escriben en el mismo Excel y no pueden pisarse).
+    en_paralelo = {}
+    pool = ThreadPoolExecutor(max_workers=3)
+    for fuente in seleccion:
+        if fuente in SIN_EXCEL_LOCAL and fuente not in externas:
+            en_paralelo[fuente] = pool.submit(ejecutar, fuente, logs)
+    t_fuentes = time.monotonic()
     for fuente in seleccion:
         print(f'INICIANDO={fuente}', flush=True)
-        externas = fuentes_en_otra_pc()
         if fuente in externas:
             resultado = {'fuente': fuente, 'nombre': {'atp': 'ATP - Recaudación Tributaria Provincial'}.get(fuente, fuente.upper()), 'estado': 'OMITIDA',
                          'detalle': externas[fuente], 'celdas_actualizadas': 0, 'hubo_cambios': False}
@@ -217,32 +242,59 @@ def main():
             resumen['omitidas'].append(fuente)
             print(f"TERMINADO={fuente}; ESTADO=OMITIDA; DETALLE={resultado['detalle']}", flush=True)
             continue
+        if fuente in en_paralelo:
+            continue  # se agrega al final, en el orden de la lista
         if fuente not in FUENTES and fuente not in FUENTES_MANUALES:
             resultado = {'fuente': fuente, 'estado': 'ERROR', 'detalle': 'Fuente desconocida en el registro.', 'celdas_actualizadas': 0}
             cargas = []
         else:
             resultado, cargas = ejecutar(fuente, logs)
-        texto_error = ' '.join(str(resultado.get(k) or '') for k in ('detalle', 'salida_final', 'error_final'))
-        if resultado.get('estado') == 'ERROR' and re.search(r'todav[ií]a no (?:est[aá] disponible|fue publicad|se public)', texto_error, re.IGNORECASE):
-            # Publicación oficial aún no disponible: no es una falla.
-            resultado['estado'] = 'PENDIENTE'
-            m = re.search(r'[ÚU]ltimo per[ií]odo oficial detectado: ([0-9-]+)', texto_error)
-            resultado['detalle'] = 'Todavía no se publicó el período siguiente' + (f'; el último publicado ({m.group(1)}) ya está cargado.' if m else '.')
-        resumen['resultados'].append(resultado)
-        resumen['ejecutadas'].append(fuente)
-        if resultado.get('estado') == 'PENDIENTE':
-            pass
-        elif resultado.get('estado') == 'OK':
-            for carga in cargas:
-                carga['fuente'] = fuente
-            resumen['actualizaciones_google'].extend(cargas)
-        else:
-            resumen['errores'].append(fuente)
-        resumen['fin'] = ahora()
-        guardar(resumen)
-        print(f"TERMINADO={fuente}; ESTADO={resultado.get('estado')}; DETALLE={resultado.get('detalle', '')}", flush=True)
+        registrar(fuente, resultado, cargas)
+    for fuente, futuro in en_paralelo.items():
+        try:
+            resultado, cargas = futuro.result()
+        except Exception as error:  # noqa: BLE001
+            resultado, cargas = {'fuente': fuente, 'nombre': fuente.upper(), 'estado': 'ERROR', 'detalle': str(error), 'celdas_actualizadas': 0, 'hubo_cambios': False}, []
+        registrar(fuente, resultado, cargas)
+    pool.shutdown(wait=True)
+    tiempos['fuentes'] = round(time.monotonic() - t_fuentes, 1)
+    orden = {f: i for i, f in enumerate(seleccion)}
+    resumen['resultados'].sort(key=lambda r: orden.get(r.get('fuente'), len(orden)))
+    t = time.monotonic()
     escribir_en_sheet(resumen)
+    tiempos['escribir_sheet'] = round(time.monotonic() - t, 1)
+    _continuar_despues_de_escribir(resumen, seleccion, tiempos, t0)
+    return 0
+
+
+def registrar(fuente, resultado, cargas):
+    """Agrega el resultado de una fuente al resumen (estado PENDIENTE, cargas para el Sheet, errores)."""
+    resumen = REGISTRO['resumen']
+    texto_error = ' '.join(str(resultado.get(k) or '') for k in ('detalle', 'salida_final', 'error_final'))
+    if resultado.get('estado') == 'ERROR' and re.search(r'todav[ií]a no (?:est[aá] disponible|fue publicad|se public)', texto_error, re.IGNORECASE):
+        # Publicación oficial aún no disponible: no es una falla.
+        resultado['estado'] = 'PENDIENTE'
+        m = re.search(r'[ÚU]ltimo per[ií]odo oficial detectado: ([0-9-]+)', texto_error)
+        resultado['detalle'] = 'Todavía no se publicó el período siguiente' + (f'; el último publicado ({m.group(1)}) ya está cargado.' if m else '.')
+    resumen['resultados'].append(resultado)
+    resumen['ejecutadas'].append(fuente)
+    if resultado.get('estado') == 'PENDIENTE':
+        pass
+    elif resultado.get('estado') == 'OK':
+        for carga in cargas:
+            carga['fuente'] = fuente
+        resumen['actualizaciones_google'].extend(cargas)
+    else:
+        resumen['errores'].append(fuente)
+    resumen['fin'] = ahora()
+    guardar(resumen)
+    print(f"TERMINADO={fuente}; ESTADO={resultado.get('estado')}; DETALLE={resultado.get('detalle', '')}", flush=True)
+
+
+def _continuar_despues_de_escribir(resumen, seleccion, tiempos, t0):
+    """Power BI, SRT desestacionalizada, aviso de Telegram y Word de descripciones."""
     # Tablas para el tablero de Power BI (seguridad social). Nunca frena la revisión.
+    t = time.monotonic()
     if any(f in seleccion for f in ('bess', 'anses', 'bess_historico', 'anses_historico')):
         try:
             proceso = subprocess.run([sys.executable, '-u', str(RAIZ / 'scripts' / 'powerbi' / 'exportar_seguridad_social.py')],
@@ -251,10 +303,13 @@ def main():
         except Exception as error:
             resumen['powerbi'] = f'ERROR: {error}'
     # SRT: serie de trabajadores desestacionalizada (estimación DAEE), en columnas propias del Sheet.
-    # Se recalcula en cada revisión de la SRT (si no hay mes nuevo no cambia nada; cada mes nuevo corrige
-    # un poco los últimos). Nunca frena la revisión.
+    # Se recalcula cuando la SRT carga datos (cada mes nuevo corrige un poco los últimos); si no hubo
+    # cambios en la SRT el resultado sería el mismo, así que no se repite. Nunca frena la revisión.
+    tiempos['powerbi'] = round(time.monotonic() - t, 1)
+    t = time.monotonic()
     if any(f in seleccion for f in ('srt', 'srt_historico')) and any(
-            r.get('fuente') in ('srt', 'srt_historico') and r.get('estado') in ('OK', 'PENDIENTE') for r in resumen['resultados']):
+            r.get('fuente') in ('srt', 'srt_historico') and r.get('estado') == 'OK' and r.get('hubo_cambios')
+            for r in resumen['resultados']):
         try:
             entorno = os.environ.copy()
             entorno['PYTHONIOENCODING'] = 'utf-8'
@@ -264,6 +319,7 @@ def main():
             resumen['srt_desestacionalizada'] = 'OK' if 'ESTADO=OK' in salida else ('ERROR: ' + (re.findall(r'^ERROR=(.*)$', salida, re.M) or [proceso.stderr[-300:]])[-1])
         except Exception as error:
             resumen['srt_desestacionalizada'] = f'ERROR: {error}'
+    tiempos['srt_desestacionalizada'] = round(time.monotonic() - t, 1)
     resumen['estado'] = 'ERROR' if resumen['errores'] else 'OK'
     resumen['fin'] = ahora()
     try:
@@ -276,6 +332,7 @@ def main():
         resumen['notificacion']['mensaje_telegram'] = ((resumen['notificacion'].get('mensaje_telegram') or '') + '\n⚠️ SRT desestacionalizada (estimación DAEE): ' + __import__('html').escape(resumen['srt_desestacionalizada'][7:200])).strip()
     # Word con la descripción para el Observatorio de cada indicador publicado con datos nuevos
     # (se guarda en descripciones/ y se manda al grupo de Telegram). Nunca frena la revisión.
+    t = time.monotonic()
     try:
         sys.path.insert(0, str(RAIZ / 'scripts' / 'reportes' / 'descripciones'))
         from generar_descripciones import para_revision
@@ -284,6 +341,9 @@ def main():
             resumen['notificacion']['mensaje_telegram'] = (resumen['notificacion'].get('mensaje_telegram') or '') + '\n\n' + linea
     except Exception as error:
         resumen['descripciones'] = [{'estado': 'ERROR', 'detalle': str(error)[:300]}]
+    tiempos['descripciones'] = round(time.monotonic() - t, 1)
+    tiempos['total'] = round(time.monotonic() - t0, 1)
+    resumen['tiempos_segundos'] = tiempos
     guardar(resumen)
     print('RESUMEN_N8N=' + json.dumps(resumen, ensure_ascii=False), flush=True)
     print('RESUMEN_ARCHIVO=' + str(DESTINO), flush=True)
@@ -468,7 +528,7 @@ un resumen JSON estable para n8n.
             if ruta.stat().st_size == 0:
                 return f'El extractor está vacío: {self.ruta_relativa}'
             return None
-    FUENTES: dict[str, Fuente] = {'eph': Fuente(nombre='Mercado de trabajo - EPH', ruta_relativa='scripts/mercado_trabajo/ejecutar_eph.py', argumentos=('--solo-extraer',)), 'pbi': Fuente(nombre='PBI', ruta_relativa='scripts/pbi/ejecutar_pbi.py'), 'iaraf': Fuente(nombre='IARAF', ruta_relativa='scripts/iaraf/ejecutar_iaraf.py'), 'atp': Fuente(nombre='ATP - Recaudación Tributaria Provincial', ruta_relativa='scripts/atp/ejecutar_atp.py'), 'canasta': Fuente(nombre='CBA y CBT', ruta_relativa='scripts/canasta/ejecutar_canasta.py'), 'sipa': Fuente(nombre='SIPA - Trabajo registrado', ruta_relativa='scripts/sipa/ejecutar_sipa.py'), 'ipi': Fuente(nombre='IPI manufacturero', ruta_relativa='scripts/ipi/ejecutar_ipi.py'), 'cammesa': Fuente(nombre='CAMMESA - Demanda eléctrica de Formosa', ruta_relativa='scripts/cammesa/ejecutar_cammesa.py'), 'dnrpa': Fuente(nombre='DNRPA', ruta_relativa='scripts/dnrpa/ejecutar_dnrpa.py'), 'ieric': Fuente(nombre='IERIC', ruta_relativa='scripts/ieric/ejecutar_ieric.py'), 'ipc': Fuente(nombre='IPC', ruta_relativa='scripts/ipc/ejecutar_ipc.py'), 'internet': Fuente(nombre='INDEC - Accesos a internet', ruta_relativa='scripts/internet/ejecutar_internet.py'), 'transferencias_fiscales': Fuente(nombre='Transferencias automaticas - IARAF', ruta_relativa='scripts/transferencias_fiscales/ejecutar_transferencias_fiscales.py', argumentos=('--solo-extraer',)), 'srt': Fuente(nombre='SRT - Trabajadores y empleadores (Formosa)', ruta_relativa='scripts/srt/ejecutar_srt.py'), 'srt_historico': Fuente(nombre='SRT - Carga histórica desde ene 2023', ruta_relativa='scripts/srt/ejecutar_srt.py', argumentos=('--desde', '2023-01')), 'combustibles': Fuente(nombre='Precio de combustibles - CECHA', ruta_relativa='scripts/combustibles/ejecutar_combustibles.py'), 'ieric_correccion': Fuente(nombre='IERIC - Corrección verificada con informes oficiales', ruta_relativa='scripts/ieric/ejecutar_ieric.py', argumentos=('--aplicar-correccion', 'correccion_20261002.json')), 'correccion_transferencias': Fuente(nombre='Transferencias IARAF - Corrección del acumulado Nación 2026', ruta_relativa='scripts/correcciones/aplicar_correccion_sheet.py', argumentos=('--archivo', 'transferencias_acumulado_2026.json')), 'limpieza_motos': Fuente(nombre='DNRPA - Limpieza de celdas cargadas por error (motos, nov/dic 26)', ruta_relativa='scripts/correcciones/aplicar_correccion_sheet.py', argumentos=('--archivo', 'limpieza_motos_filas_futuras.json')), 'control_base': Fuente(nombre='Control de la hoja BASE DE DATOS (solo revisar)', ruta_relativa='scripts/comun/control_base.py', argumentos=('--solo-revisar',)), 'bess': Fuente(nombre='BESS - Seguridad social (ANSES)', ruta_relativa='scripts/bess/ejecutar_bess.py'), 'bess_historico': Fuente(nombre='BESS - Carga histórica desde marzo 2023', ruta_relativa='scripts/bess/ejecutar_bess.py', argumentos=('--historico',)), 'bess_prueba': Fuente(nombre='BESS - Prueba de extracción (no escribe)', ruta_relativa='scripts/bess/ejecutar_bess.py', argumentos=('--historico', '--solo-extraer')), 'anses': Fuente(nombre='ANSES - Seguridad social mensual por provincia', ruta_relativa='scripts/anses/ejecutar_anses.py'), 'anses_historico': Fuente(nombre='ANSES - Carga histórica mensual desde enero 2024', ruta_relativa='scripts/anses/ejecutar_anses.py', argumentos=('--historico',)), 'anses_prueba': Fuente(nombre='ANSES - Prueba de extracción (no escribe)', ruta_relativa='scripts/anses/ejecutar_anses.py', argumentos=('--historico', '--solo-extraer')), 'gasto_provincial': Fuente(nombre='Gasto provincial por finalidad y función (Ministerio de Economía)', ruta_relativa='scripts/gasto_provincial/ejecutar_gasto_provincial.py'), 'gasto_provincial_historico': Fuente(nombre='Gasto provincial - Carga histórica desde 2023', ruta_relativa='scripts/gasto_provincial/ejecutar_gasto_provincial.py', argumentos=('--historico',)), 'gasto_provincial_prueba': Fuente(nombre='Gasto provincial - Prueba de extracción (no escribe)', ruta_relativa='scripts/gasto_provincial/ejecutar_gasto_provincial.py', argumentos=('--historico', '--solo-extraer')), 'borrar_gasto_provincial': Fuente(nombre='Gasto provincial MECON - Borrar columnas del Sheet', ruta_relativa='scripts/gasto_provincial/borrar_columnas.py'), 'becas': Fuente(nombre='Becas para estudiantes (Presupuesto Abierto)', ruta_relativa='scripts/becas/ejecutar_becas.py'), 'becas_historico': Fuente(nombre='Becas - Carga histórica desde enero 2023', ruta_relativa='scripts/becas/ejecutar_becas.py', argumentos=('--historico',)), 'becas_prueba': Fuente(nombre='Becas - Prueba de extracción (no escribe)', ruta_relativa='scripts/becas/ejecutar_becas.py', argumentos=('--historico', '--solo-extraer')), 'descripcion_prueba': Fuente(nombre='Descripción para el Observatorio (Word) - prueba con Supermercados', ruta_relativa='scripts/reportes/descripciones/generar_descripciones.py', argumentos=('--indicador', 'supermercados')), 'srt_desestacionalizada': Fuente(nombre='SRT - Trabajadores desestacionalizados (estimación DAEE)', ruta_relativa='scripts/srt/desestacionalizar_srt.py')}
+    FUENTES: dict[str, Fuente] = {'eph': Fuente(nombre='Mercado de trabajo - EPH', ruta_relativa='scripts/mercado_trabajo/ejecutar_eph.py', argumentos=('--solo-extraer',)), 'pbi': Fuente(nombre='PBI', ruta_relativa='scripts/pbi/ejecutar_pbi.py'), 'iaraf': Fuente(nombre='IARAF', ruta_relativa='scripts/iaraf/ejecutar_iaraf.py'), 'atp': Fuente(nombre='ATP - Recaudación Tributaria Provincial', ruta_relativa='scripts/atp/ejecutar_atp.py'), 'canasta': Fuente(nombre='CBA y CBT', ruta_relativa='scripts/canasta/ejecutar_canasta.py'), 'sipa': Fuente(nombre='SIPA - Trabajo registrado', ruta_relativa='scripts/sipa/ejecutar_sipa.py'), 'ipi': Fuente(nombre='IPI manufacturero', ruta_relativa='scripts/ipi/ejecutar_ipi.py'), 'cammesa': Fuente(nombre='CAMMESA - Demanda eléctrica de Formosa', ruta_relativa='scripts/cammesa/ejecutar_cammesa.py'), 'dnrpa': Fuente(nombre='DNRPA', ruta_relativa='scripts/dnrpa/ejecutar_dnrpa.py'), 'ieric': Fuente(nombre='IERIC', ruta_relativa='scripts/ieric/ejecutar_ieric.py'), 'ipc': Fuente(nombre='IPC', ruta_relativa='scripts/ipc/ejecutar_ipc.py'), 'internet': Fuente(nombre='INDEC - Accesos a internet', ruta_relativa='scripts/internet/ejecutar_internet.py'), 'transferencias_fiscales': Fuente(nombre='Transferencias automaticas - IARAF', ruta_relativa='scripts/transferencias_fiscales/ejecutar_transferencias_fiscales.py', argumentos=('--solo-extraer',)), 'srt': Fuente(nombre='SRT - Trabajadores y empleadores (Formosa)', ruta_relativa='scripts/srt/ejecutar_srt.py'), 'srt_historico': Fuente(nombre='SRT - Carga histórica desde ene 2023', ruta_relativa='scripts/srt/ejecutar_srt.py', argumentos=('--desde', '2023-01')), 'combustibles': Fuente(nombre='Precio de combustibles - CECHA', ruta_relativa='scripts/combustibles/ejecutar_combustibles.py'), 'ieric_correccion': Fuente(nombre='IERIC - Corrección verificada con informes oficiales', ruta_relativa='scripts/ieric/ejecutar_ieric.py', argumentos=('--aplicar-correccion', 'correccion_20261002.json')), 'correccion_transferencias': Fuente(nombre='Transferencias IARAF - Corrección del acumulado Nación 2026', ruta_relativa='scripts/correcciones/aplicar_correccion_sheet.py', argumentos=('--archivo', 'transferencias_acumulado_2026.json')), 'limpieza_motos': Fuente(nombre='DNRPA - Limpieza de celdas cargadas por error (motos, nov/dic 26)', ruta_relativa='scripts/correcciones/aplicar_correccion_sheet.py', argumentos=('--archivo', 'limpieza_motos_filas_futuras.json')), 'control_base': Fuente(nombre='Control de la hoja BASE DE DATOS (solo revisar)', ruta_relativa='scripts/comun/control_base.py', argumentos=('--solo-revisar',)), 'bess': Fuente(nombre='BESS - Seguridad social (ANSES)', ruta_relativa='scripts/bess/ejecutar_bess.py'), 'bess_historico': Fuente(nombre='BESS - Carga histórica desde marzo 2023', ruta_relativa='scripts/bess/ejecutar_bess.py', argumentos=('--historico',)), 'bess_prueba': Fuente(nombre='BESS - Prueba de extracción (no escribe)', ruta_relativa='scripts/bess/ejecutar_bess.py', argumentos=('--historico', '--solo-extraer')), 'anses': Fuente(nombre='ANSES - Seguridad social mensual por provincia', ruta_relativa='scripts/anses/ejecutar_anses.py'), 'anses_historico': Fuente(nombre='ANSES - Carga histórica mensual desde enero 2024', ruta_relativa='scripts/anses/ejecutar_anses.py', argumentos=('--historico',)), 'anses_prueba': Fuente(nombre='ANSES - Prueba de extracción (no escribe)', ruta_relativa='scripts/anses/ejecutar_anses.py', argumentos=('--historico', '--solo-extraer')), 'gasto_provincial': Fuente(nombre='Gasto provincial por finalidad y función (Ministerio de Economía)', ruta_relativa='scripts/gasto_provincial/ejecutar_gasto_provincial.py'), 'gasto_provincial_historico': Fuente(nombre='Gasto provincial - Carga histórica desde 2023', ruta_relativa='scripts/gasto_provincial/ejecutar_gasto_provincial.py', argumentos=('--historico',)), 'gasto_provincial_prueba': Fuente(nombre='Gasto provincial - Prueba de extracción (no escribe)', ruta_relativa='scripts/gasto_provincial/ejecutar_gasto_provincial.py', argumentos=('--historico', '--solo-extraer')), 'borrar_gasto_provincial': Fuente(nombre='Gasto provincial MECON - Borrar columnas del Sheet', ruta_relativa='scripts/gasto_provincial/borrar_columnas.py'), 'becas': Fuente(nombre='Becas para estudiantes (Presupuesto Abierto)', ruta_relativa='scripts/becas/ejecutar_becas.py'), 'becas_historico': Fuente(nombre='Becas - Carga histórica desde enero 2023', ruta_relativa='scripts/becas/ejecutar_becas.py', argumentos=('--historico',)), 'becas_prueba': Fuente(nombre='Becas - Prueba de extracción (no escribe)', ruta_relativa='scripts/becas/ejecutar_becas.py', argumentos=('--historico', '--solo-extraer')), 'descripcion_prueba': Fuente(nombre='Descripción para el Observatorio (Word) - prueba con Supermercados', ruta_relativa='scripts/reportes/descripciones/generar_descripciones.py', argumentos=('--indicador', 'supermercados')), 'descripcion_soja': Fuente(nombre='Descripción para el Observatorio (Word) - Producción de soja', ruta_relativa='scripts/reportes/descripciones/generar_descripciones.py', argumentos=('--cultivo', 'soja')), 'descripcion_pecuario': Fuente(nombre='Descripción para el Observatorio (Word) - Sector pecuario (WhatsApp de consumo)', ruta_relativa='scripts/reportes/descripciones/generar_descripciones.py', argumentos=('--pecuario', 'bovinos,porcinos,aves,consumo_pecuario', '--whatsapp', 'consumo_pecuario')), 'comparar_transferencias': Fuente(nombre='Transferencias automáticas - comparación NEA y años anteriores (no escribe)', ruta_relativa='scripts/transferencias_fiscales/comparar_transferencias.py'), 'srt_desestacionalizada': Fuente(nombre='SRT - Trabajadores desestacionalizados (estimación DAEE)', ruta_relativa='scripts/srt/desestacionalizar_srt.py')}
 
     def configurar_salida() -> None:
         """Configura la salida del ejecutor general en UTF-8."""
@@ -627,17 +687,31 @@ un resumen JSON estable para n8n.
         inicio = datetime.now().astimezone()
         seleccion_local = [clave for clave in seleccion if clave not in FUENTES_DIRECTAS_GOOGLE]
         estado_antes = capturar_hoja() if seleccion_local else {'encabezados': {}, 'valores': {}}
+
+        def huella():
+            try:
+                st = ARCHIVO_EXCEL.stat()
+                return (st.st_mtime_ns, st.st_size)
+            except OSError:
+                return None
+        huella_antes = huella() if seleccion_local else None
         resultados = [ejecutar_fuente(clave=clave, fuente=FUENTES[clave], estricto=args.estricto) for clave in seleccion]
+        # Si la fuente no tocó el Excel local (lo más común: no había datos nuevos), no hace falta completar
+        # fórmulas, recalcular con Excel ni volver a leer el libro: es igual al de antes.
+        sin_cambios_excel = bool(seleccion_local) and huella_antes is not None and huella() == huella_antes
         errores = [resultado['fuente'] for resultado in resultados if resultado['estado'] == 'ERROR']
         omitidas = [resultado['fuente'] for resultado in resultados if resultado['estado'] == 'OMITIDA']
         finalizacion = None
-        if not errores and seleccion_local:
+        if not errores and seleccion_local and sin_cambios_excel:
+            finalizacion = {'estado': 'OK', 'detalle': 'El Excel local no cambió: no hizo falta recalcular'}
+        elif not errores and seleccion_local:
             finalizacion = finalizar_excel(seleccion_local)
             if finalizacion['estado'] == 'ERROR':
                 errores.append('formulas_excel')
         elif not errores:
             finalizacion = {'estado': 'NO_REQUERIDO', 'detalle': 'La fuente se carga directamente en Google Sheets por encabezados'}
-        actualizaciones_google = preparar_actualizaciones_google(estado_antes, capturar_hoja()) if seleccion_local and (not errores) else []
+        estado_final = (estado_antes if sin_cambios_excel else capturar_hoja()) if seleccion_local and (not errores) else None
+        actualizaciones_google = preparar_actualizaciones_google(estado_antes, estado_final) if estado_final is not None else []
         if 'dnrpa' in seleccion_local:
             originales_dnrpa = set(CAMPOS_GOOGLE_POR_FUENTE['dnrpa'])
             prefijos_dnrpa = ('patentamiento de automóviles', 'transferencias de automoviles', 'transferencias de automóviles', 'patentamiento de motos', 'transferencias de motos', 'trasnferencias de motos')
@@ -651,7 +725,7 @@ un resumen JSON estable para n8n.
                     actualizaciones_google.append({'hoja': HOJA_DESTINO, 'periodo': periodo_erroneo, 'valores': {titulo: '' for titulo in resultado['valores_extraidos']}})
                 actualizaciones_google.append({'hoja': HOJA_DESTINO, 'periodo': resultado['periodo'], 'valores': resultado['valores_extraidos'], 'permitir_reemplazos': bool(resultado.get('permitir_reemplazos'))})
         if seleccion_local:
-            estado_despues = capturar_hoja()
+            estado_despues = estado_final if estado_final is not None else capturar_hoja()  # el libro no cambió desde la última captura
             for item in preparar_actualizaciones_forzadas(estado_despues, seleccion_local, resultados, args.forzar_google):
                 existente = next((actualizacion for actualizacion in actualizaciones_google if actualizacion['hoja'] == item['hoja'] and actualizacion['periodo'] == item['periodo']), None)
                 if existente:
@@ -684,9 +758,15 @@ un resumen JSON estable para n8n.
         carpeta_n8n = RAIZ / 'salidas_n8n'
         carpeta_n8n.mkdir(parents=True, exist_ok=True)
         destino_n8n = carpeta_n8n / 'resumen_general.json'
-        temporal_n8n = carpeta_n8n / 'resumen_general.tmp'
-        temporal_n8n.write_text(json.dumps(resumen, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
-        temporal_n8n.replace(destino_n8n)
+        temporal_n8n = carpeta_n8n / f'resumen_general_motor_{os.getpid()}.tmp'
+        try:  # el ejecutor lee el resultado por la salida; el archivo es solo una copia
+            temporal_n8n.write_text(json.dumps(resumen, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
+            temporal_n8n.replace(destino_n8n)
+        except OSError:
+            try:
+                temporal_n8n.unlink()
+            except OSError:
+                pass
         print('RESUMEN_N8N=' + json.dumps(resumen, ensure_ascii=False, separators=(',', ':')))
         print(f"ESTADO={resumen['estado']}")
         return 0

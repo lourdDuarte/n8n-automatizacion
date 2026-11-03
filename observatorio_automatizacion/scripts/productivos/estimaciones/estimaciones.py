@@ -184,7 +184,7 @@ def actualizar_sheet(datos: dict, cliente: ClienteSheets | None = None) -> dict:
                 raise RuntimeError(f"verificación fallida en {c['celda']}: se leyó {obtenido!r}")
     info['escritas'] = len(cambios)
     info['ya_estaban'] = max(0, info['esperadas'] - len(cambios) - len(info['errores']) * len(TITULOS))
-    info['cambios'] = cambios[:60]
+    info['cambios'] = cambios[:300]
     info['periodos'] = sorted({k[1] for k in datos})[-2:]
     return info
 

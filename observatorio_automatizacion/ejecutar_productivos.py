@@ -465,6 +465,17 @@ def main() -> int:
         resumen["notificacion"]["mensaje_telegram"] = armar_mensaje(resumen)
     except Exception as error:
         resumen["notificacion"]["mensaje_telegram"] = f"⚠️ No se pudo armar el aviso: {error}"
+    # Sector pecuario: Word con la descripción y la plantilla de WhatsApp de Bovinos, Porcinos y Aves
+    # cuando entran datos nuevos, y de Consumo cuando el mes tiene las tres carnes. Nunca frena la revisión.
+    try:
+        sys.path.insert(0, str(RAIZ / "scripts" / "reportes" / "descripciones"))
+        from generar_descripciones import para_revision_productivos
+        resumen["descripciones"], linea = para_revision_productivos(resumen)
+        if linea:
+            resumen["notificacion"]["mensaje_telegram"] = (
+                (resumen["notificacion"].get("mensaje_telegram") or "") + "\n\n" + linea)
+    except Exception as error:
+        resumen["descripciones"] = [{"estado": "ERROR", "detalle": str(error)[:300]}]
     carpeta_n8n = RAIZ / "salidas_n8n"
     carpeta_n8n.mkdir(parents=True, exist_ok=True)
     destino_n8n = carpeta_n8n / "resumen_productivos.json"

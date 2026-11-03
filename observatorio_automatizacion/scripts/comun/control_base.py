@@ -237,6 +237,23 @@ def _clave_estable(celda: str, formula) -> str:
     return f'{fila}|{relativa}'
 
 
+_REF_OTRA = re.compile(r"((?:'[^']+'|[A-Za-z0-9_]+)!)\$?([A-Z]{1,3})\$?(\d+)")
+
+
+def _patron(celda: str, formula) -> str:
+    """La fórmula 'arrastrada': mismas referencias relativas a su fila, en cualquier fila.
+    Así, si el equipo arrastra hacia abajo una fórmula ya conocida (p. ej. la de Ventas en
+    supermercados que trae el dato de su pestaña, ='Ventas en Supermercados'!F68 en la fila 91),
+    los meses nuevos no se avisan."""
+    m = re.fullmatch(r'([A-Z]+)(\d+)', str(celda))
+    if not m:
+        return str(formula)
+    col, fila = _col_num(m[1]), int(m[2])
+    texto = str(formula or '')
+    texto = _REF_OTRA.sub(lambda r: f'{r[1]}{r[2]}R[{int(r[3]) - fila}]', texto)
+    return _REF.sub(lambda r: f'R[{int(r[2]) - fila}]C[{_col_num(r[1]) - col}]', texto)
+
+
 def _linea_base(hallazgos: list[dict]) -> list[dict]:
     """Primera vez: guarda las fórmulas fuera de patrón que ya existían y no las avisa.
     La comparación es por fila y fórmula relativa, así las fórmulas conocidas no vuelven a
@@ -253,7 +270,15 @@ def _linea_base(hallazgos: list[dict]) -> list[dict]:
             celda, _, formula = str(item).partition('|')
             # formato viejo "ND26|=..." -> se pasa a la clave estable; el nuevo ya viene "26|=..."
             conocidas.add(_clave_estable(celda, formula) if re.fullmatch(r'[A-Z]+\d+', celda) else str(item))
-    return [h for h in hallazgos if h.get('limpiar_con') is not None or clave(h) not in conocidas]
+    # Patrones conocidos (fórmula arrastrada) a partir de la línea de base.
+    patrones = set()
+    for item in conocidas:
+        fila, _, relativa = item.partition('|')
+        if fila.isdigit():
+            patrones.add(_patron(f'A{fila}', relativa.replace('R[', '\x00')).replace('\x00', 'R['))
+    def conocida(h):
+        return clave(h) in conocidas or _patron(h['celda'], h.get('formula')) in patrones
+    return [h for h in hallazgos if h.get('limpiar_con') is not None or not conocida(h)]
 
 
 # ------------------------------------------------------------- principal

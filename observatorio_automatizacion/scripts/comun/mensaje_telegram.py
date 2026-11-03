@@ -64,6 +64,16 @@ def _conteo(sheet: dict) -> dict:
 
 
 PRODUCTIVOS = {'comercializacion', 'pecuaria', 'estimaciones'}
+# Fuentes que se informan como "dato nuevo" solo cuando entra el mes completo.
+SOLO_MES_COMPLETO = {'dnrpa'}
+
+
+def _vacio(valor) -> bool:
+    try:
+        from sheet_directo import vacio_o_cero
+        return vacio_o_cero(valor)
+    except Exception:  # noqa: BLE001
+        return valor in (None, '', 0, '0')
 # Palabras del encabezado de la hoja de productivos -> qué se actualizó, en criollo.
 TEMAS_PRODUCTIVOS = [('porcino', 'porcinos'), ('bovino', 'bovinos'), ('aves', 'aves'), ('huevo', 'aves'),
                      ('proteina', 'consumo de carnes'), ('consumo', 'consumo de carnes'),
@@ -119,6 +129,15 @@ def _revisar(resumen: dict, extra_por_fuente: dict) -> tuple[list[dict], list[st
             it['conteo'] = f"{c['en_sheet']} de {c['esperadas']}" if c['esperadas'] else ''
             it['escritas'] = c['escritas']
             it['tipo'] = 'nuevo' if c['escritas'] else 'sin'
+            if it['tipo'] == 'nuevo' and fuente in SOLO_MES_COMPLETO:
+                nuevos = [x for x in (sheet.get('cambios') or []) + (r.get('cambios') or [])
+                          if _vacio(x.get('antes')) and not x.get('mismo_dato')]
+                if not nuevos or (c['esperadas'] and c['en_sheet'] < c['esperadas']):
+                    # DNRPA corrige 1 o 2 valores de Nación varias veces por semana: eso no es "dato nuevo".
+                    it['tipo'] = 'sin'
+                    hecho = (f"se ajustaron {c['escritas']} valor(es) ya publicados" if not nuevos else
+                             f"por ahora hay {c['en_sheet']} de {c['esperadas']} datos del mes")
+                    it['notas'].append(hecho + '; se informa (con Word y plantilla) cuando entre el mes completo')
             it['temas'] = _temas(sheet) if fuente in PRODUCTIVOS else ''
             if c['motivos'] or (c['esperadas'] and c['en_sheet'] < c['esperadas']):
                 faltan = c['esperadas'] - c['en_sheet']
@@ -129,6 +148,8 @@ def _revisar(resumen: dict, extra_por_fuente: dict) -> tuple[list[dict], list[st
             it['tipo'] = 'sin'
         if extra_por_fuente.get(fuente):
             it['notas'].append(extra_por_fuente[fuente])
+        for aviso in (sheet or {}).get('avisos') or []:
+            it['notas'].append('⚠️ ' + _limpio(aviso, 200))
         for nota in re.findall(r'^NOTA_TELEGRAM=(.+)$', str(r.get('salida_final') or ''), re.M):
             it['notas'].append(_limpio(nota, 300))
         if vigilancia.get(fuente) and estado != 'ERROR':

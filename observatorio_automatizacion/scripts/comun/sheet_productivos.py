@@ -407,6 +407,21 @@ def escribir_productivos(cargas: list[dict], base_local: Path, cliente: ClienteS
                     obtenido = fila_leida[col - 1] if col - 1 < len(fila_leida) else None
                     if not iguales(obtenido, c['despues']):
                         raise RuntimeError(f"verificación fallida en {c['celda']}: se leyó {obtenido!r}")
+            if not carga.get('reparacion'):  # columnas calculadas (p. ej. variación del maíz)
+                try:
+                    from extender_formulas import FILAS_ATRAS, planear
+                    ini = max(2, fila - FILAS_ATRAS)
+                    bloque = _leer(cliente, titulo, f'A{ini}:BZ{fila}', 'FORMULA')
+                    cols = {sheet.columna(t)[0] for t, v in valores.items() if v is not None} - {None}
+                    plan = planear(bloque, ini, fila, cols)
+                    if plan:
+                        r = cliente.sesion.post(f'{API}/values:batchUpdate', json={
+                            'valueInputOption': 'USER_ENTERED',
+                            'data': [{'range': f"'{titulo}'!{a1}", 'values': [[f]]} for a1, f in plan]}, timeout=90)
+                        r.raise_for_status()
+                        info.setdefault('formulas_extendidas', []).extend(a1 for a1, _ in plan)
+                except Exception as error:  # noqa: BLE001 - nunca frena la carga
+                    info.setdefault('avisos', []).append(f'no se pudieron extender las fórmulas: {error}')
             if carga.get('reparacion'):
                 info['reparadas'] += len(cambios)
             else:

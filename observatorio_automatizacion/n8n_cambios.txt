@@ -13,6 +13,12 @@ A) Nodo "Preparar mensaje Telegram" (para que no se mande nada cuando no hay nov
    y no se envía nada.
 
 B) Nodo IF "Es indicador general" (para poder correrlos a mano desde "Elegir indicador puntual")
-   Agregar a la lista de fuentes: 'descripcion_prueba', 'srt_desestacionalizada'
+   Agregar a la lista de fuentes: 'descripcion_prueba', 'descripcion_soja', 'descripcion_pecuario', 'comparar_transferencias', 'srt_desestacionalizada'
 
-C) Guardar el flujo (Ctrl+S).
+C) Nodo "Enviar aviso Telegram - Grupo" (el error "The connection to the server was closed
+   unexpectedly" es un corte momentáneo de la conexión con Telegram; con esto se reintenta solo)
+   1) Doble clic en el nodo "Enviar aviso Telegram - Grupo" > pestaña "Settings" (Configuración).
+   2) Activar "Retry On Fail". Max Tries: 4. Wait Between Tries (ms): 5000.
+   3) Repetir en cualquier otro nodo de Telegram que tenga el flujo.
+
+D) Guardar el flujo (Ctrl+S).

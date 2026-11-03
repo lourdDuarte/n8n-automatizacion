@@ -130,9 +130,10 @@ def extraer_indicadores(texto):
     abreviados = {nombre[:3]: numero for nombre, numero in MESES.items()}
     encabezados = []
     for linea in empresas:
-        tokens = re.findall('\\b(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)[- /](\\d{4}|\\d{2})\\b', linea, re.I)
+        # Septiembre aparece como "sep", "sept" o "set" según el informe (N° 252: "sept-26").
+        tokens = re.findall('\\b(ene|feb|mar|abr|may|jun|jul|ago|sept?|set|oct|nov|dic)\\.?[- /](\\d{4}|\\d{2})\\b', linea, re.I)
         if len(tokens) >= 6:
-            encabezados.append([(2000 + int(a) if len(a) == 2 else int(a), abreviados[m.lower()]) for m, a in tokens])
+            encabezados.append([(2000 + int(a) if len(a) == 2 else int(a), abreviados[{'sept': 'sep', 'set': 'sep'}.get(m.lower(), m.lower())]) for m, a in tokens])
     if len(encabezados) != 1:
         raise ValueError('No se identifica un encabezado mensual único para empresas')
     fechas = encabezados[0]

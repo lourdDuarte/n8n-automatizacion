@@ -276,6 +276,20 @@ def escribir_actualizaciones(cargas: list[dict], base_local: Path | None = None,
     periodos = [f[0] if f else None for f in cliente.leer('A:A')]
     sheet = Mapa(encabezados, periodos)
     local = mapa_local(base_local) if base_local else None
+    # Una sola lectura de toda la hoja (con fórmulas) en lugar de 2 o 3 lecturas por carga: es lo que más
+    # tardaba. Se mantiene al día en memoria con lo que se va escribiendo.
+    grilla = [list(f) for f in cliente.leer('A1:BZZ2000', render='FORMULA')]
+
+    def fila_grilla(n: int) -> list:
+        return grilla[n - 1] if 0 < n <= len(grilla) else []
+
+    def poner(n: int, col: int, valor) -> None:
+        while len(grilla) < n:
+            grilla.append([])
+        f = grilla[n - 1]
+        while len(f) < col:
+            f.append('')
+        f[col - 1] = valor
 
     def info(fuente):
         return resumen['por_fuente'].setdefault(fuente, {
@@ -308,12 +322,8 @@ def escribir_actualizaciones(cargas: list[dict], base_local: Path | None = None,
             if not destinos:
                 continue
             c1, c2 = min(destinos), max(destinos)
-            actual = cliente.leer(f'{letra(c1)}{fila}:{letra(c2)}{fila}', render='FORMULA')
-            actual = actual[0] if actual else []
-            arriba = []
-            if any(es_formula(v) for v in valores.values()) and fila > 2:
-                arriba = cliente.leer(f'{letra(c1)}{fila - 1}:{letra(c2)}{fila - 1}', render='FORMULA')
-                arriba = arriba[0] if arriba else []
+            actual = fila_grilla(fila)[c1 - 1:c2]
+            arriba = fila_grilla(fila - 1)[c1 - 1:c2] if fila > 2 else []
 
             def existente(col):
                 i = col - c1
@@ -392,8 +402,25 @@ def escribir_actualizaciones(cargas: list[dict], base_local: Path | None = None,
                         continue
                     if not iguales(obtenido, cambio['despues']):
                         raise RuntimeError(f"verificación fallida en {cambio['celda']}: se leyó {obtenido!r}")
+                for i, v in enumerate(leido):
+                    poner(fila, c1 + i, v)
             datos_fuente['escritas'] += len(cambios)
             datos_fuente['cambios'].extend(cambios)
+            if destinos:  # columnas calculadas del Sheet que dependen de lo cargado: se arrastra la fórmula
+                try:
+                    from extender_formulas import FILAS_ATRAS, planear
+                    ini = max(2, fila - FILAS_ATRAS)
+                    bloque = [fila_grilla(n) for n in range(ini, fila + 1)]
+                    cols = {col for col, (_, v) in destinos.items() if v is not None}
+                    plan = planear(bloque, ini, fila, cols)
+                    if plan:
+                        cliente.escribir([{'range': f"'{HOJA}'!{a1}", 'values': [[f]]} for a1, f in plan])
+                        datos_fuente.setdefault('formulas_extendidas', []).extend(a1 for a1, _ in plan)
+                        for a1, f in plan:
+                            m = re.match(r'([A-Z]+)(\d+)$', a1)
+                            poner(int(m.group(2)), numero_columna(m.group(1)), f)
+                except Exception as error:  # noqa: BLE001 - nunca frena la carga
+                    datos_fuente.setdefault('avisos', []).append(f'no se pudieron extender las fórmulas: {error}')
         except Exception as error:  # una carga fallida no frena a las demás
             datos_fuente['errores'].append(str(error))
     for fuente, datos_fuente in resumen['por_fuente'].items():

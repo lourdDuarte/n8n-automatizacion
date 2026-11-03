@@ -739,6 +739,9 @@ INDICADORES = {
 NOMBRES = {'supermercados': 'Supermercados', 'emae': 'EMAE', 'ipc': 'IPC', 'autos': 'Autos', 'motos': 'Motos',
            'construccion': 'Construcción', 'sector_privado': 'Sector privado', 'recaudacion': 'Recaudación ATP',
            'transferencias': 'Transferencias', 'energia': 'Energía', 'internet': 'Internet', 'pobreza': 'Pobreza e indigencia'}
+NOMBRES_PECUARIO = {'bovinos': 'Bovinos', 'porcinos': 'Porcinos', 'aves': 'Aves', 'consumo_pecuario': 'Consumo de carnes',
+                    'pecuario': 'Sector pecuario', 'agricola': 'Producción agrícola',
+                    'comercializacion': 'Comercialización de granos'}
 POR_FUENTE = {
     'supermercados': ['supermercados'], 'emae': ['emae'], 'ipc': ['ipc'], 'dnrpa': ['autos', 'motos'],
     'ieric': ['construccion'], 'ieric_correccion': ['construccion'], 'sipa': ['sector_privado'], 'atp': ['recaudacion'],
@@ -832,6 +835,30 @@ def generar(indicador: str, periodo=None, datos: Datos | None = None, telegram=T
     return resultado
 
 
+# Fuentes que solo cuentan como "dato nuevo" cuando entra el mes completo (no por correcciones de
+# 1 o 2 valores, como hace DNRPA con Nación dos veces por semana).
+SOLO_MES_COMPLETO = {'dnrpa'}
+
+
+def mes_completo_nuevo(r: dict, resumen: dict) -> bool:
+    """True si esta revisión cargó datos en celdas vacías y el mes quedó completo en el Sheet."""
+    from sheet_directo import vacio_o_cero
+    sheet = ((resumen.get('sheet_directo') or {}).get('por_fuente') or {}).get(r.get('fuente'))
+    cambios = (r.get('cambios') or []) + ((sheet or {}).get('cambios') or [])
+    nuevos = [c for c in cambios if vacio_o_cero(c.get('antes')) and not c.get('mismo_dato')]
+    if not nuevos:
+        return False
+    if sheet:
+        try:
+            from mensaje_telegram import _conteo
+            c = _conteo(sheet)
+            if c['esperadas'] and c['en_sheet'] < c['esperadas']:
+                return False
+        except Exception:  # noqa: BLE001
+            pass
+    return True
+
+
 def generar_desde_resumen(resumen: dict, telegram=True) -> list[dict]:
     """Para cada fuente con datos nuevos en esta revisión, arma el Word de sus indicadores publicados."""
     from sheet_directo import periodo_de
@@ -840,8 +867,10 @@ def generar_desde_resumen(resumen: dict, telegram=True) -> list[dict]:
         cambios = r.get('hubo_cambios') in (True, 'True', 'true') or int(r.get('celdas_actualizadas') or 0) > 0
         if r.get('estado') != 'OK' or not cambios:
             continue
+        if str(r.get('fuente', '')).lower() in SOLO_MES_COMPLETO and not mes_completo_nuevo(r, resumen):
+            continue
         for indicador in POR_FUENTE.get(str(r.get('fuente', '')).lower(), []):
-            pedidos[indicador] = periodo_de(str(r.get('periodo') or '')[:10]) if r.get('periodo') else None
+            pedidos[indicador] = str(r.get('periodo') or '')[:10] if r.get('periodo') else None
     if not pedidos:
         return []
     datos = cargar_datos()
@@ -864,23 +893,164 @@ def para_revision(resumen: dict) -> tuple[list[dict], str]:
     return lista, _lineas(lista)
 
 
+def para_revision_productivos(resumen: dict, telegram=True) -> tuple[list[dict], str]:
+    """Revisión de productivos: Word de Bovinos, Porcinos, Aves (cuando entran datos nuevos de esa
+    especie) y de Consumo (cuando el mes tiene el consumo de las tres carnes). Nunca frena la revisión."""
+    lista = []
+    por_fuente = (resumen.get('sheet_directo') or {}).get('por_fuente') or {}
+    # Producción agrícola (Estimaciones MAGyP): un Word por cultivo con datos nuevos (p. ej. solo soja)
+    try:
+        cambios = (por_fuente.get('estimaciones') or {}).get('cambios') or []
+        if cambios:
+            import agricola
+            datos_ag = agricola.cargar()
+            hoy = datetime.now()
+            for g, campana in sorted(agricola.pedidos_desde_cambios(cambios, datos_ag).items()):
+                etiqueta = f"{agricola.NOMBRE.get(g, g)} {campana}"
+                try:
+                    nombre, bloques, plataforma = agricola.describir(datos_ag, g, campana)
+                except agricola.Falta as falta:
+                    lista.append({'indicador': 'agricola', 'etiqueta': etiqueta, 'estado': 'SIN_DATOS', 'detalle': str(falta)})
+                    continue
+                ruta = armar_word(nombre, bloques, plataforma, (hoy.year, hoy.month))
+                x = {'indicador': 'agricola', 'etiqueta': etiqueta, 'periodo': f'{hoy.year}-{hoy.month:02d}',
+                     'estado': 'OK', 'archivo': str(ruta)}
+                if telegram:
+                    try:
+                        x['telegram'] = enviar_telegram(ruta, f'📝 Descripción para el Observatorio: Producción agrícola – '
+                                                              f'{etiqueta}.\nPlantilla de WhatsApp + texto de la plataforma '
+                                                              '(revisar lo marcado en amarillo).')
+                    except Exception as error:  # noqa: BLE001
+                        x['telegram'] = f'ERROR: {error}'
+                lista.append(x)
+    except Exception as error:  # noqa: BLE001
+        lista.append({'indicador': 'agricola', 'estado': 'ERROR', 'detalle': str(error)[:300]})
+    # Comercialización de granos: Word cuando entra un mes nuevo (celdas que estaban vacías).
+    try:
+        from sheet_directo import vacio_o_cero
+        cambios = (por_fuente.get('comercializacion') or {}).get('cambios') or []
+        if any(vacio_o_cero(c.get('antes')) and not c.get('mismo_dato') for c in cambios):
+            import comercializacion
+            try:
+                nombre, bloques, plataforma, p = comercializacion.describir(comercializacion.cargar())
+                ruta = armar_word(nombre, bloques, plataforma, p)
+                x = {'indicador': 'comercializacion', 'periodo': f'{p[0]}-{p[1]:02d}', 'estado': 'OK', 'archivo': str(ruta)}
+                if telegram:
+                    try:
+                        x['telegram'] = enviar_telegram(ruta, f'📝 Descripción para el Observatorio: Comercialización de granos – {titulo_mes(p)}.\n'
+                                                              'Plantilla de WhatsApp + texto de la plataforma (revisar lo marcado en amarillo).')
+                    except Exception as error:  # noqa: BLE001
+                        x['telegram'] = f'ERROR: {error}'
+                lista.append(x)
+            except comercializacion.Falta as falta:
+                lista.append({'indicador': 'comercializacion', 'estado': 'SIN_DATOS', 'detalle': str(falta)})
+    except Exception as error:  # noqa: BLE001
+        lista.append({'indicador': 'comercializacion', 'estado': 'ERROR', 'detalle': str(error)[:300]})
+    try:
+        sheet = por_fuente.get('pecuaria') or {}
+        cambios = sheet.get('cambios') or []
+        if not cambios:
+            return lista, _lineas(lista)
+        import pecuario
+        datos = pecuario.cargar()
+        for pagina, p in pecuario.pedidos_desde_cambios(cambios, datos).items():
+            try:
+                nombre, bloques, plataforma = pecuario.INDICADORES[pagina](datos, p)
+            except pecuario.Falta as falta:
+                lista.append({'indicador': pagina, 'periodo': f'{p[0]}-{p[1]:02d}', 'estado': 'SIN_DATOS', 'detalle': str(falta)})
+                continue
+            ruta = armar_word(nombre, bloques, plataforma, p)
+            x = {'indicador': pagina, 'periodo': f'{p[0]}-{p[1]:02d}', 'estado': 'OK', 'archivo': str(ruta)}
+            if telegram:
+                try:
+                    x['telegram'] = enviar_telegram(ruta, f'📝 Descripción para el Observatorio: {pecuario.NOMBRES[pagina]} – {titulo_mes(p)}.\n'
+                                                          'Plantilla de WhatsApp + texto de la plataforma (revisar lo marcado en amarillo).')
+                except Exception as error:  # noqa: BLE001
+                    x['telegram'] = f'ERROR: {error}'
+            lista.append(x)
+    except Exception as error:  # noqa: BLE001
+        lista.append({'indicador': 'pecuario', 'estado': 'ERROR', 'detalle': str(error)[:300]})
+    return lista, _lineas(lista)
+
+
+def generar_pecuario(paginas: list[str], whatsapp: str | None = None, telegram=True) -> dict:
+    """Corrida a mano: descripciones de varias páginas pecuarias (último mes cargado) en UN Word.
+    Con whatsapp='consumo_pecuario' la plantilla de WhatsApp es solo la de Consumo (resume las tres carnes)."""
+    import pecuario
+    d = pecuario.cargar()
+    bloques, plataforma, meses, faltan = [], [], [], []
+    for pagina in paginas:
+        if pagina == 'consumo_pecuario':
+            comunes = [p for p in d.series.get('cons_bov', {}) if d.v('cons_por', p) and d.v('cons_aves', p)]
+            p = max(comunes) if comunes else None
+        else:
+            p = d.ultimo(pecuario.PRINCIPAL[pagina])
+        if not p:
+            faltan.append(f'{pecuario.NOMBRES[pagina]}: sin datos')
+            continue
+        try:
+            _, w, plat = pecuario.INDICADORES[pagina](d, p)
+        except pecuario.Falta as falta:
+            faltan.append(f'{pecuario.NOMBRES[pagina]}: {falta}')
+            continue
+        if not whatsapp or whatsapp == pagina:
+            bloques += w
+        plataforma += [(f'{sub} ({titulo_mes(p)})', t) for sub, t in plat]
+        meses.append(p)
+    if not plataforma:
+        return {'indicador': 'pecuario', 'estado': 'SIN_DATOS', 'detalle': '; '.join(faltan)}
+    p = max(meses)
+    ruta = armar_word('Sector_pecuario', bloques, plataforma, p)
+    x = {'indicador': 'pecuario', 'periodo': f'{p[0]}-{p[1]:02d}', 'estado': 'OK', 'archivo': str(ruta)}
+    if faltan:
+        x['detalle'] = '; '.join(faltan)
+    if telegram:
+        try:
+            x['telegram'] = enviar_telegram(ruta, f'📝 Descripciones para el Observatorio: Sector pecuario (Bovinos, Porcinos, Aves y '
+                                                  f'Consumo) – {titulo_mes(p)}.\nPlantilla de WhatsApp: '
+                                                  f'{pecuario.NOMBRES.get(whatsapp, "todas") if whatsapp else "todas"}. '
+                                                  'Revisar lo marcado en amarillo.')
+        except Exception as error:  # noqa: BLE001
+            x['telegram'] = f'ERROR: {error}'
+    return x
+
+
+def generar_cultivo(texto: str, telegram=True) -> dict:
+    """Corrida a mano de un cultivo: 'soja' (última campaña cargada) o 'soja:2025/26'."""
+    import agricola
+    g, _, campana = texto.partition(':')
+    g = agricola.grupo(g)
+    datos = agricola.cargar()
+    cult = datos.principal(g)
+    if not cult:
+        return {'indicador': 'agricola', 'etiqueta': g, 'estado': 'SIN_DATOS', 'detalle': 'cultivo no encontrado en la base'}
+    campana = campana or datos.campanas(cult)[-1]
+    resumen = {'sheet_directo': {'por_fuente': {'estimaciones': {'cambios': [
+        {'antes': None, 'titulo': f'{datos.nombres[cult]} {campana}'}]}}}}
+    lista, _ = para_revision_productivos(resumen, telegram)
+    return lista[0] if lista else {'indicador': 'agricola', 'estado': 'ERROR', 'detalle': 'no se generó'}
+
+
 def _lineas(lista: list[dict]) -> str:
     if not lista:
         return ''
     lineas = []
     for x in lista:
-        nombre = NOMBRES.get(x.get('indicador'), x.get('indicador', 'Descripción'))
+        nombre = NOMBRES.get(x.get('indicador')) or NOMBRES_PECUARIO.get(x.get('indicador'), x.get('indicador', 'Descripción'))
         if x.get('estado') == 'OK':
             t = x.get('telegram')
             envio = ' y enviado al grupo' if t == 'enviado' else ' (guardado en la carpeta descripciones)' if t is None else \
                 f' (guardado en la carpeta descripciones; no se pudo mandar por Telegram: {t})'
             a, m = (x.get('periodo') or '0000-00').split('-')
-            lineas.append(f"📝 {nombre} ({MESES[int(m)][:3]} {a[2:]}): Word con la descripción para el Observatorio listo{envio}.")
+            cuando = x.get('etiqueta') or f"{MESES[int(m)][:3]} {a[2:]}"
+            lineas.append(f"📝 {nombre} ({cuando}): Word con la descripción para el Observatorio listo{envio}.")
         elif x.get('estado') == 'SIN_DATOS':
+            nombre += f" ({x['etiqueta']})" if x.get('etiqueta') else ''
             lineas.append(f"📝 {nombre}: no se armó la descripción ({x.get('detalle', 'faltan datos en la base')}).")
         else:
             lineas.append(f"⚠️ {nombre}: error al armar la descripción ({x.get('detalle', '')}).")
-    return '\n'.join(lineas)
+    import html
+    return html.escape('\n'.join(lineas), quote=False)
 
 
 def main() -> int:
@@ -888,6 +1058,9 @@ def main() -> int:
     ap.add_argument('--resumen', help='resumen_*.json de una revisión')
     ap.add_argument('--indicador', help=', '.join(INDICADORES))
     ap.add_argument('--periodo', help='AAAA-MM (por defecto, el último cargado)')
+    ap.add_argument('--cultivo', help='producción agrícola: soja, maiz, trigo... (opcional :AAAA/AA)')
+    ap.add_argument('--pecuario', help='bovinos,porcinos,aves,consumo_pecuario: un solo Word con esas descripciones')
+    ap.add_argument('--whatsapp', help='con --pecuario: de qué página va la plantilla de WhatsApp (por defecto, de todas)')
     ap.add_argument('--sin-telegram', action='store_true')
     ap.add_argument('--listar', action='store_true')
     args = ap.parse_args()
@@ -897,12 +1070,16 @@ def main() -> int:
     if args.resumen:
         resumen = json.loads(Path(args.resumen).read_text(encoding='utf-8-sig'))
         salida = generar_desde_resumen(resumen, not args.sin_telegram)
+    elif args.pecuario:
+        salida = [generar_pecuario([x.strip() for x in args.pecuario.split(',')], args.whatsapp, telegram=not args.sin_telegram)]
+    elif args.cultivo:
+        salida = [generar_cultivo(x.strip(), telegram=not args.sin_telegram) for x in args.cultivo.split(',')]
     elif args.indicador:
         salida = [generar(x.strip(), args.periodo, telegram=not args.sin_telegram) for x in args.indicador.split(',')]
     else:
         ap.error('indicar --resumen o --indicador')
     print('DESCRIPCIONES=' + json.dumps(salida, ensure_ascii=False))
-    if args.indicador:  # corrida a mano (o "descripcion_prueba" desde n8n)
+    if args.indicador or args.cultivo or args.pecuario:  # corrida a mano (o "descripcion_prueba" desde n8n)
         print('NOTA_TELEGRAM=' + _lineas(salida).replace('\n', ' · '))
         print('ESTADO=' + ('OK' if all(x.get('estado') == 'OK' for x in salida) else 'ERROR'))
     return 0
