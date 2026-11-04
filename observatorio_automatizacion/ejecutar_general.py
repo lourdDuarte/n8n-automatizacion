@@ -18,7 +18,8 @@ FUENTES_MANUALES = ['srt_historico', 'ieric_correccion', 'correccion_transferenc
 FUENTES = ['eph', 'pbi', 'iaraf', 'atp', 'canasta', 'sipa', 'ipi', 'cammesa', 'dnrpa', 'ieric', 'ipc', 'internet', 'transferencias_fiscales', 'srt', 'combustibles', 'bess', 'anses', 'becas']
 
 # Fuentes que no abren el Excel local (descargan y se cargan directo en el Sheet): pueden correr en paralelo.
-SIN_EXCEL_LOCAL = {'eph', 'transferencias_fiscales', 'bess', 'anses', 'becas'}
+# transferencias_fiscales NO va en paralelo: usa el informe de IARAF que descarga la fuente 'iaraf' antes.
+SIN_EXCEL_LOCAL = {'eph', 'bess', 'anses', 'becas'}
 REGISTRO = {}
 
 

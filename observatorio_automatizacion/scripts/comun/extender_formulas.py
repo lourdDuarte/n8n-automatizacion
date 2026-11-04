@@ -16,6 +16,7 @@ import re
 
 REF = re.compile(r"(?<![A-Za-z0-9_'!.$])(\$?)([A-Z]{1,3})(\$?)(\d+)(?![\d(A-Za-z_!])")
 FILAS_ATRAS = 3  # hasta cuántas filas arriba se busca la última fórmula
+VENTANA = 40  # columnas a cada lado del bloque cargado donde también se extienden fórmulas cuyos datos ya están
 
 
 def _letra(n: int) -> str:
@@ -81,7 +82,11 @@ def planear(bloque: list[list], fila_inicio: int, fila: int, columnas: set[int])
                 continue
             refs = referencias(base)
             misma = {col for col, f, absoluta in refs if f == r0 and not absoluta and col != c}
-            if not misma or not (misma & fuentes):
+            if not misma:
+                continue
+            # Depende de lo que se cargó, o está en el mismo bloque del indicador y usa columnas que ya
+            # tienen dato en la fila (p. ej. supermercados: variaciones de NG, que es una fórmula a otra pestaña).
+            if not (misma & fuentes) and not (min(columnas) - VENTANA <= c <= max(columnas) + VENTANA):
                 continue
             for r in range(r0 + 1, fila + 1):
                 if celda(r, c) not in (None, ''):

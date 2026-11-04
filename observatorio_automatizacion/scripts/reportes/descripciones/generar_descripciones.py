@@ -785,7 +785,39 @@ def _token():
     return m.group(0) if m else None
 
 
+# Las revisiones automáticas mandan cada Word UNA sola vez (aunque la revisión siguiente vuelva a ver
+# cambios en esas celdas). Las corridas a mano (descripcion_*) lo mandan siempre.
+UNA_VEZ = {'activo': False}
+ENVIADOS = CARPETA / 'enviados.json'
+
+
+def _enviados() -> dict:
+    try:
+        return json.loads(ENVIADOS.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+
+
+def _marcar_enviado(nombre: str) -> None:
+    try:
+        d = _enviados()
+        d[nombre] = datetime.now().isoformat(timespec='seconds')
+        ENVIADOS.parent.mkdir(parents=True, exist_ok=True)
+        ENVIADOS.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding='utf-8')
+    except OSError:
+        pass
+
+
 def enviar_telegram(ruta: Path, texto: str) -> str:
+    if UNA_VEZ['activo'] and ruta.name in _enviados():
+        return 'YA_ENVIADO'
+    resultado = _enviar_telegram(ruta, texto)
+    if resultado == 'enviado':
+        _marcar_enviado(ruta.name)
+    return resultado
+
+
+def _enviar_telegram(ruta: Path, texto: str) -> str:
     token = _token()
     if not token:
         return 'sin token de Telegram (config/telegram.env)'
@@ -886,14 +918,28 @@ def generar_desde_resumen(resumen: dict, telegram=True) -> list[dict]:
 def para_revision(resumen: dict) -> tuple[list[dict], str]:
     """Lo llaman las revisiones (general y complejos). Nunca frena la revisión.
     Devuelve (detalle, línea para agregar al aviso de Telegram)."""
+    UNA_VEZ['activo'] = True
     try:
         lista = generar_desde_resumen(resumen)
     except Exception as error:  # noqa: BLE001
         lista = [{'estado': 'ERROR', 'detalle': str(error)[:300]}]
+    finally:
+        UNA_VEZ['activo'] = False
+    lista = [x for x in lista if x.get('telegram') != 'YA_ENVIADO']
     return lista, _lineas(lista)
 
 
-def para_revision_productivos(resumen: dict, telegram=True) -> tuple[list[dict], str]:
+def para_revision_productivos(resumen: dict, telegram=True, una_vez=True) -> tuple[list[dict], str]:
+    UNA_VEZ['activo'] = una_vez
+    try:
+        lista, _ = _para_revision_productivos(resumen, telegram)
+    finally:
+        UNA_VEZ['activo'] = False
+    lista = [x for x in lista if x.get('telegram') != 'YA_ENVIADO']
+    return lista, _lineas(lista)
+
+
+def _para_revision_productivos(resumen: dict, telegram=True) -> tuple[list[dict], str]:
     """Revisión de productivos: Word de Bovinos, Porcinos, Aves (cuando entran datos nuevos de esa
     especie) y de Consumo (cuando el mes tiene el consumo de las tres carnes). Nunca frena la revisión."""
     lista = []
@@ -1027,7 +1073,7 @@ def generar_cultivo(texto: str, telegram=True) -> dict:
     campana = campana or datos.campanas(cult)[-1]
     resumen = {'sheet_directo': {'por_fuente': {'estimaciones': {'cambios': [
         {'antes': None, 'titulo': f'{datos.nombres[cult]} {campana}'}]}}}}
-    lista, _ = para_revision_productivos(resumen, telegram)
+    lista, _ = para_revision_productivos(resumen, telegram, una_vez=False)
     return lista[0] if lista else {'indicador': 'agricola', 'estado': 'ERROR', 'detalle': 'no se generó'}
 
 

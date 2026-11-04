@@ -469,6 +469,19 @@ def main():
     if not iaraf and not dnap:
         raise RuntimeError("No se pudo consultar ni IARAF ni la DNAP (Ministerio de Economía).")
 
+    # Si la web de IARAF no dejó consultar pero la fuente 'iaraf' ya guardó el informe de ese mismo mes,
+    # se usa ese informe (si no, cada revisión alternaba entre la cifra de IARAF y la estimación DNAP).
+    if dnap and (not iaraf or dnap[0] > iaraf[0]):
+        local = RAIZ / "fuentes" / "iaraf" / f"iaraf_transferencias_{dnap[0][:4]}_{dnap[0][5:7]}.pdf"
+        if local.exists():
+            try:
+                contenido_l = local.read_bytes()
+                periodo_l, valores_l = extraer_pdf(contenido_l)
+                if periodo_l == dnap[0]:
+                    iaraf = (periodo_l, valores_l, contenido_l, None, None, local.name, False)
+            except Exception as error:  # noqa: BLE001
+                print(f"AVISO: no se pudo leer {local.name}: {error}")
+
     notas = []
     usar_dnap = bool(dnap and (not iaraf or dnap[0] > iaraf[0]))
     reemplazar = False
