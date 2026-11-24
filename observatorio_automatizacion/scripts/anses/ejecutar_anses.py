@@ -348,27 +348,47 @@ def recibir_por_telegram() -> tuple[list[str], str | None]:
     return guardados, None
 
 
-def recordatorio(ultimo: str) -> str | None:
-    """Una vez por día, si ya debería haber salido el informe siguiente, lo recuerda en el aviso."""
-    anio, mes = int(ultimo[:4]), int(ultimo[5:7])
-    mes_sig = mes + 3
-    anio_sig = anio + (mes_sig - 1) // 12
-    mes_sig = (mes_sig - 1) % 12 + 1
-    # ANSES publica el informe unos 3 meses después de terminado el trimestre
-    # (ej.: "ESS_Junio2026" = I trimestre 2026, datos a marzo).
-    esperado = date(anio_sig + (mes_sig + 3 - 1) // 12, (mes_sig + 3 - 1) % 12 + 1, 1)
+INFORMES = {'Pasivos': 'Pasivos', 'Asignaciones familiares y AUH': 'Asignaciones Familiares y Universales',
+            'Desempleo': 'Activos y Prestación por Desempleo'}
+MESES_C = ('ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic')
+
+
+def _mas_meses(p, n):
+    t = p[0] * 12 + p[1] - 1 + n
+    return (t // 12, t % 12 + 1)
+
+
+def recordatorio(ultimos: dict) -> str | None:
+    """Una vez por día recuerda qué Excel de ANSES falta mandar al bot.
+    ultimos: {grupo: (año, mes) del último dato cargado}. Desde sep-26 ANSES publica tres informes
+    separados y con fechas distintas: si uno quedó atrás de los otros, se pide ese; si están todos
+    al día, se pide el trimestre siguiente cuando ya debería haber salido (unas 4 semanas después
+    de terminado el trimestre)."""
+    if not ultimos:
+        return None
+    adelante = max(ultimos.values())
+    faltan = [g for g, p in ultimos.items() if p < adelante]
     hoy = date.today()
+    if not faltan:
+        prox = _mas_meses(adelante, 3)
+        esperado = _mas_meses(prox, 1)
+        if (hoy.year, hoy.month) < esperado or ((hoy.year, hoy.month) == esperado and hoy.day < 25):
+            return None
+        faltan = list(ultimos)
+        hasta = prox
+    else:
+        hasta = adelante
     estado = _estado()
-    if hoy < esperado or estado.get('recordado') == hoy.isoformat():
+    if estado.get('recordado') == hoy.isoformat():
         return None
     estado['recordado'] = hoy.isoformat()
     ESTADO_TELEGRAM.parent.mkdir(parents=True, exist_ok=True)
     ESTADO_TELEGRAM.write_text(json.dumps(estado), encoding='utf-8')
-    meses = ('ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic')
-    return (f'📥 Ya debería estar el informe de ANSES con datos a {meses[mes_sig - 1]} {anio_sig % 100:02d}: '
-            'bajá el Excel de anses.gob.ar/estudiosyestadisticas y mandalo a @Obs_formosa345_bot (por privado o en el grupo). '
-            'Desde sep-26 ANSES publica tres informes separados (Pasivos; Asignaciones Familiares y Universales; '
-            'Activos y Desempleo): mandá el Excel de cada uno cuando salga.')
+    detalle = '; '.join(f'"{INFORMES[g]}" (último cargado: {MESES_C[ultimos[g][1] - 1]} {ultimos[g][0] % 100:02d})'
+                        for g in faltan)
+    return (f'📥 ANSES: falta el Excel de {detalle}, con datos a {MESES_C[hasta[1] - 1]} {hasta[0] % 100:02d}. '
+            'Cuando esté publicado, bajalo de anses.gob.ar/estudiosyestadisticas y mandalo a @Obs_formosa345_bot '
+            '(por privado o en el grupo); se carga solo en la revisión siguiente.')
 
 
 def main() -> int:
@@ -388,18 +408,21 @@ def main() -> int:
         usadas.append('serie inicial anses_2024_2026.json')
     recibidos, aviso_telegram = recibir_por_telegram()
     CARPETA_FUENTES.mkdir(parents=True, exist_ok=True)
+    ultimos = {g: (2026, 3) for g in GRUPOS}  # la serie inicial llega a mar-26 en los tres grupos
     for ruta in sorted(CARPETA_FUENTES.glob('*.xls*'), key=lambda r: r.stat().st_mtime):
         try:
-            parcial = extraer(ruta.read_bytes())
+            grupos_archivo = []
+            parcial = extraer(ruta.read_bytes(), grupos_archivo)
+            if parcial:
+                for g in grupos_archivo:
+                    ultimos[g] = max(ultimos[g], max(parcial))
         except Exception as error:  # noqa: BLE001
             fallos.append(f'{ruta.name}: {error}')
             continue
         for p, v in parcial.items():  # el archivo más nuevo corrige al anterior (solo lo que trae)
             datos.setdefault(p, {}).update(v)
         usadas.append(ruta.name)
-    inicial_json = json.loads((Path(__file__).with_name('anses_2024_2026.json')).read_text(encoding='utf-8'))
-    ultimo_cargado = max([*inicial_json['datos'], *(f'{p[0]}-{p[1]:02d}' for p in datos)])
-    nota = recordatorio(ultimo_cargado)
+    nota = recordatorio(ultimos)
     if nota:
         print('NOTA_TELEGRAM=' + nota)
     if aviso_telegram:

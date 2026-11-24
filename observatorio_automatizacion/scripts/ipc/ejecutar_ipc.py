@@ -511,6 +511,71 @@ def prueba_parser(ruta_xls: Path) -> None:
     print("PRUEBA_PARSER=OK")
 
 
+def extraer_api() -> dict:
+    """Mismos 68 valores desde el Catálogo API-INDEC (vía principal; el Excel queda de respaldo).
+
+    Probado el 19/11/2026: los 68 valores de oct-26 coinciden con los del Excel.
+    """
+    sys.path.insert(0, str(raiz_proyecto() / "scripts" / "indec"))
+    from cliente_indec import consultar, consultar_todo
+
+    ultimo = consultar("ipc_nacional", {"select": "periodo", "order": "periodo.desc", "limit": 1})
+    periodo_txt = str(ultimo[0]["periodo"])
+    filas = consultar_todo(
+        "ipc_nacional",
+        {"periodo": f"eq.{periodo_txt}", "region": "in.(Noreste,Nacional)",
+         "tipo_de_indicador": "in.(Indice,v_m,v_ia,v_acum)"},
+        "clasificador,nivel,codigo,region,tipo_de_indicador",
+    )
+
+    def buscar(region: str, clasificadores: tuple, descripcion: str, tipo: str) -> float:
+        encontrados = [f["valor"] for f in filas
+                       if f["region"] == region and f["tipo_de_indicador"] == tipo
+                       and f["clasificador"] in clasificadores
+                       and normalizar(f["descripcion"]) == normalizar(descripcion)
+                       and f["valor"] is not None]
+        if not encontrados:
+            raise ValueError(f"API INDEC: falta {descripcion} ({region}, {tipo})")
+        return float(encontrados[0])
+
+    ipc, coicop = ("IPC",), ("COICOP Argentina 2019",)
+    cat = ("Estacional, Núcleo y Regulados", "Estacionales, Núcleo y Regulados")
+    valores = {
+        "PT": buscar("Noreste", ipc, "Nivel general", "Indice"),
+        "PU": buscar("Nacional", ipc, "Nivel general", "Indice"),
+        "PV": buscar("Noreste", ipc, "Nivel general", "v_m"),
+        "PW": buscar("Nacional", ipc, "Nivel general", "v_m"),
+        "PX": redondear_un_decimal(buscar("Noreste", ipc, "Nivel general", "v_acum")),
+        "PY": redondear_un_decimal(buscar("Nacional", ipc, "Nivel general", "v_acum")),
+        "PZ": buscar("Noreste", ipc, "Nivel general", "v_ia"),
+        "QA": buscar("Nacional", ipc, "Nivel general", "v_ia"),
+    }
+    for i, division in enumerate(DIVISIONES):
+        valores[("QB", "QC", "QD", "QE", "QF", "QG", "QH", "QI", "QJ", "QK", "QL", "QM")[i]] = buscar("Noreste", coicop, division, "v_m")
+        valores[("QN", "QO", "QP", "QQ", "QR", "QS", "QT", "QU", "QV", "QW", "QX", "QY")[i]] = buscar("Noreste", coicop, division, "v_ia")
+        valores[f"N_M_{i + 1:02d}"] = buscar("Nacional", coicop, division, "v_m")
+        valores[f"N_A_{i + 1:02d}"] = buscar("Nacional", coicop, division, "v_ia")
+    for prefijo, etiqueta in CLASIFICACIONES:
+        valores[f"{prefijo}_M_NEA"] = buscar("Noreste", cat, etiqueta, "v_m")
+        valores[f"{prefijo}_M_N"] = buscar("Nacional", cat, etiqueta, "v_m")
+        valores[f"{prefijo}_A_NEA"] = buscar("Noreste", cat, etiqueta, "v_ia")
+        valores[f"{prefijo}_A_N"] = buscar("Nacional", cat, etiqueta, "v_ia")
+    if len(valores) != 68:
+        raise ValueError(f"API INDEC: se esperaban 68 valores y llegaron {len(valores)}")
+    periodo = date(int(periodo_txt[:4]), int(periodo_txt[4:6]), 1)
+    return {
+        "fuente": "INDEC - IPC",
+        "periodo": periodo.isoformat(),
+        "anio": periodo.year,
+        "mes_numero": periodo.month,
+        "url_planilla": "https://api.indec.gob.ar/v1/ipc_nacional",
+        "origen_dato": "Catálogo API-INDEC",
+        "consultado_en": datetime.now().isoformat(timespec="seconds"),
+        "valores": valores,
+        "validaciones": {"cantidad_valores": len(valores), "cantidad_esperada": 68},
+    }
+
+
 def main() -> int:
     raiz = raiz_proyecto()
     parser = argparse.ArgumentParser(description="Detecta el último IPC publicado y actualiza sus 68 indicadores.")
@@ -523,9 +588,17 @@ def main() -> int:
         if args.probar_parser:
             prueba_parser(args.probar_parser)
             return 0
+        resultado = None
         if args.xls:
             contenido, url = args.xls.read_bytes(), args.xls.resolve().as_uri()
         else:
+            # Vía principal: Catálogo API-INDEC. Si falla (sin token, caída, cambio), se usa el Excel.
+            try:
+                resultado = extraer_api()
+                print(f"IPC: datos tomados del Catálogo API-INDEC ({resultado['periodo'][:7]}).")
+            except Exception as error_api:  # noqa: BLE001
+                print(f"AVISO: Catálogo API-INDEC no disponible ({error_api}); se usa el Excel del INDEC.")
+        if not args.xls:
             # Se prueban los nombres conocidos y todos los archivos de la página del IPC;
             # se usa el que trae el período más reciente (aunque el INDEC cambie el nombre).
             sys.path.insert(0, str(raiz / "scripts" / "comun"))
@@ -535,7 +608,19 @@ def main() -> int:
                         for p in (sumar_meses(date(hoy.year, hoy.month, 1), -i) for i in range(3))]
             urls = candidatos([URL_XLS_FIJA, *fechados], PAGINAS_INDEC["ipc"], incluir=("ipc",),
                               excluir=("aperturas", "precios_promedio", "ponderadores"))
-            resultado, url, _ = elegir_mas_reciente(urls, lambda c, u: ((r := extraer(c, u))["periodo"], r))
+            try:
+                del_excel, url, _ = elegir_mas_reciente(urls, lambda c, u: ((r := extraer(c, u))["periodo"], r))
+            except Exception as error_excel:  # noqa: BLE001
+                if resultado is None:
+                    raise
+                del_excel = None
+                print(f"AVISO: no se pudo leer el Excel del IPC ({error_excel}); se usa la API.")
+            # El Excel se usa si la API falló o si el Excel ya trae un mes más nuevo
+            # (por si el día de publicación la API se actualiza más tarde).
+            if del_excel and (resultado is None or del_excel["periodo"] > resultado["periodo"]):
+                if resultado is not None:
+                    print(f"AVISO: el Excel trae {del_excel['periodo'][:7]} y la API todavía {resultado['periodo'][:7]}; se usa el Excel.")
+                resultado = del_excel
         if args.xls:
             resultado = extraer(contenido, url)
         if not args.solo_extraer:

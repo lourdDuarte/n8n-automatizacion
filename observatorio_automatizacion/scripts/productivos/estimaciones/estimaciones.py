@@ -78,9 +78,16 @@ def actualizar_sheet(datos: dict, cliente: ClienteSheets | None = None) -> dict:
     if not fila_enc:
         raise RuntimeError('No se encontró el encabezado Cultivo / Campaña en la pestaña productiva')
     enc = filas[fila_enc - 1]
+    # La tabla es el bloque donde 'Cultivo' va seguido de 'Campaña'. A la derecha puede haber
+    # otros cuadros con una columna 'Cultivo' (p. ej. rindes por departamento): no se tocan.
+    inicios = [i for i in range(len(enc) - 1)
+               if clave(enc[i]) == clave('Cultivo') and clave(enc[i + 1]) == clave('Campaña')]
+    if len(inicios) != 1:
+        raise RuntimeError(f'Bloque Cultivo/Campaña: {len(inicios)} coincidencias en el Sheet')
+    desde, hasta = inicios[0], inicios[0] + len(TITULOS) + 3
     cols = []
     for t in TITULOS:
-        encontradas = [i + 1 for i, v in enumerate(enc) if clave(v) == clave(t)]
+        encontradas = [i + 1 for i, v in enumerate(enc) if desde <= i < hasta and clave(v) == clave(t)]
         if len(encontradas) != 1:
             raise RuntimeError(f'Columna {t!r}: {len(encontradas)} coincidencias en el Sheet')
         cols.append(encontradas[0])

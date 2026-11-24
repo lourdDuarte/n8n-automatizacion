@@ -157,15 +157,23 @@ def extraer(anio: int, mes_cargado: int=0) -> dict:
     meses_detectados = set()
     problemas = []
     consultas = []
+    # Solo se toman meses ya terminados: el mes en curso aparece con datos parciales que
+    # DNRPA va sumando día a día, y cargarlo obligaba a corregirlo varias veces.
+    hoy = datetime.now()
+    tope = 11 if anio < hoy.year else hoy.month - 2
+    if tope < 0:
+        resultado['estado_publicacion'] = 'SIN_MES_CERRADO'
+        return resultado
     for cfg in CONSULTAS:
         try:
             tabla = extraer_tabla(descargar(anio, cfg.consulta, cfg.tipo))
         except ValueError as error:
             raise ValueError(f'DNRPA {cfg.consulta}, vehículo {cfg.tipo}, año {anio}: {error}') from error
-        indice = ultimo_mes_publicado(tabla)
-        consultas.append((cfg, tabla, indice))
+        publicado = ultimo_mes_publicado(tabla)
+        indice = min(publicado, tope)
+        consultas.append((cfg, tabla, indice, publicado))
         meses_detectados.add(indice)
-    resultado['meses_consultados'] = {cfg.nombre: MESES[indice] for cfg, _, indice in consultas}
+    resultado['meses_consultados'] = {cfg.nombre: MESES[indice] for cfg, _, indice, _ in consultas}
     ultimo = max(meses_detectados)
     resultado['mes'] = MESES[ultimo]
     resultado['mes_numero'] = ultimo + 1
@@ -174,8 +182,18 @@ def extraer(anio: int, mes_cargado: int=0) -> dict:
     if len(meses_detectados) != 1:
         resultado['estado_publicacion'] = 'PENDIENTE_CUATRO_CONSULTAS'
         return resultado
-    for cfg, tabla, indice in consultas:
-        corregido = normalizar_acumulado_en_mes(tabla, indice, cfg)
+    # 8 de 8: los cuatro trámites tienen que tener dato de Formosa y de Nación para ese mes.
+    faltan = [f"{cfg.nombre} {k}" for cfg, tabla, indice, _ in consultas for k in ('FORMOSA', 'TOTAL') if tabla[k][indice] <= 0]
+    if faltan:
+        resultado['estado_publicacion'] = 'MES_INCOMPLETO'
+        resultado['faltan'] = faltan
+        return resultado
+    for cfg, tabla, indice, publicado in consultas:
+        es_ultimo = indice == publicado
+        corregido = normalizar_acumulado_en_mes(tabla, indice, cfg) if es_ultimo else False
+        if not es_ultimo:
+            tabla['FORMOSA'][12] = sum(tabla['FORMOSA'][:indice + 1])
+            tabla['TOTAL'][12] = sum(tabla['TOTAL'][:indice + 1])
         try:
             validar_transferencias(tabla, indice, cfg)
         except ValueError as error:
@@ -225,6 +243,9 @@ def actualizar_base(resultado: dict, ruta_base: Path) -> dict:
             celda = ws.cell(fila, columna)
             anterior = celda.value
             if anterior == valor:
+                coincidencias.append(celda.coordinate)
+            elif isinstance(anterior, (int, float)) and anterior > 0:
+                # Mes ya cargado: no se corrige semana a semana (solo se completan celdas vacías).
                 coincidencias.append(celda.coordinate)
             else:
                 celda.value = valor

@@ -440,6 +440,24 @@ def desde_iaraf(args):
         return ultimo.read_bytes(), None, None, ultimo.name, False
 
 
+def desde_reporte_iaraf(periodo):
+    """Cifras del informe IARAF que ya leyó la fuente 'iaraf' (reportes/iaraf/iaraf_AAAA_MM.json)."""
+    ruta = RAIZ / "reportes" / "iaraf" / f"iaraf_{periodo[:4]}_{periodo[5:7]}.json"
+    if not ruta.exists():
+        return None
+    d = json.loads(ruta.read_text(encoding="utf-8"))
+    if (d.get("control") or {}).get("estado") != "OK" or str(d.get("periodo", ""))[:7] != periodo[:7]:
+        return None
+    f, n = d.get("formosa") or {}, d.get("nacion") or {}
+    claves = ("monto_millones", "variacion_nominal_pct", "variacion_real_pct", "acumulado_anual_millones")
+    vals = [f.get(k) for k in claves] + [n.get(k) for k in claves]
+    if any(v is None for v in vals):
+        return None
+    pdf = Path(d.get("pdf") or "")
+    contenido = pdf.read_bytes() if str(pdf) and pdf.is_file() else None
+    return (periodo, dict(zip(TITULOS, vals)), contenido, None, None, ruta.name, False)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--solo-extraer", action="store_true")
@@ -481,6 +499,16 @@ def main():
                     iaraf = (periodo_l, valores_l, contenido_l, None, None, local.name, False)
             except Exception as error:  # noqa: BLE001
                 print(f"AVISO: no se pudo leer {local.name}: {error}")
+        # Si el PDF no se pudo leer acá, se toman las cifras que ya leyó la fuente 'iaraf'
+        # (así las dos fuentes cargan el mismo número y no se pisan día por medio).
+        if not iaraf or dnap[0] > iaraf[0]:
+            try:
+                rep = desde_reporte_iaraf(dnap[0])
+                if rep:
+                    iaraf = rep
+                    print(f"AVISO: se usan las cifras del informe IARAF ya procesado ({rep[5]}).")
+            except Exception as error:  # noqa: BLE001
+                print(f"AVISO: no se pudo leer el reporte IARAF: {error}")
 
     notas = []
     usar_dnap = bool(dnap and (not iaraf or dnap[0] > iaraf[0]))
@@ -505,11 +533,12 @@ def main():
     else:
         periodo, valores, contenido, url_nota, url_pdf, titulo, en_linea = iaraf
         origen = "IARAF"
-        if not en_linea:
+        if not en_linea and not str(titulo).endswith(".json"):
             notas.append("La página de IARAF no se pudo consultar (verificación anti-robots); "
                          "se usó el último informe guardado y se controló con la DNAP.")
-        pdf = carpeta / f"transferencias_{periodo[:7]}.pdf"
-        pdf.write_bytes(contenido)
+        if contenido:
+            pdf = carpeta / f"transferencias_{periodo[:7]}.pdf"
+            pdf.write_bytes(contenido)
         # Control cruzado: si la DNAP tiene el mismo mes, los montos tienen que coincidir.
         if dnap and dnap[0] == periodo:
             for t in (TITULOS[0], TITULOS[4]):

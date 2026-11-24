@@ -179,6 +179,7 @@ def hojas(contenido: bytes):
         filas = [list(f) for f in ws.iter_rows(values_only=True)]
         filas = [f for f in filas if any(v not in (None, '') for v in f)]
         titulo = ' | '.join(norm(v) for f in filas[:4] for v in f if v not in (None, ''))
+        hojas.ultima_pestana = norm(ws.title)
         yield titulo, filas
 
 
@@ -285,8 +286,24 @@ def extraer(nombre: str, contenido: bytes) -> dict:
     elif 'aaff' in nombre:
         titulo, filas = buscar(contenido, r'ASIGNACIONES FAMILIARES.*SEGUN TIPO DE BENEFICIO Y JURISDICCION')
         if not filas:
+            # Ediciones nuevas pueden cambiar la redacción del título: se busca la pestaña 6.7
+            # o un cuadro de asignaciones familiares por jurisdicción/provincia con fila FORMOSA.
+            for t, f in hojas(contenido):
+                pest = getattr(hojas, 'ultima_pestana', '')
+                if (re.match(r'^(CUADRO )?6\.7\b', pest) or re.search(r'\b6\.7\b', t[:40])
+                        or re.search(r'ASIGNACIONES FAMILIARES.*(JURISDICCION|PROVINCIA)', t)):
+                    if any(FORMOSA.match(norm(x)) for r in f for x in r[:3]):
+                        titulo, filas = t, f
+                        break
+        if not filas:
             raise ValueError('falta el cuadro 6.7 (asignaciones familiares por jurisdicción)')
-        p = periodo_titulo(titulo, 'JURISDICCION')
+        try:
+            p = periodo_titulo(titulo, 'JURISDICCION')
+        except ValueError:
+            m = re.search(r'aaff_(\d{2})-(\d{4})', nombre)
+            if not m:
+                raise
+            p = (int(m.group(2)), int(m.group(1)))
         for rx, suf in ((TOTAL, 'N'), (FORMOSA, 'F')):
             v = numeros(fila(filas, rx))
             if abs(v[0] - v[1] - v[2]) > 0.5:
@@ -374,8 +391,22 @@ def main() -> int:
         archivos = HISTORICO + [a for a in archivos if a not in HISTORICO]
     datos: dict = {}
     fuentes_usadas = []
+    fallidos = []
     for nombre in archivos:
-        parcial = extraer(nombre, descargar(nombre))
+        contenido = descargar(nombre)
+        try:
+            parcial = extraer(nombre, contenido)
+        except Exception as error:  # noqa: BLE001
+            if args.historico:
+                raise
+            copia = RAIZ / 'fuentes' / 'bess' / Path(nombre).name
+            try:
+                copia.parent.mkdir(parents=True, exist_ok=True)
+                copia.write_bytes(contenido)
+            except OSError:
+                pass
+            fallidos.append(f'{Path(nombre).name}: {error} (copia guardada en fuentes\\bess)')
+            continue
         for p, valores in parcial.items():
             datos.setdefault(p, {}).update(valores)
         fuentes_usadas.append(BASE_URL + nombre)
@@ -409,6 +440,10 @@ def main() -> int:
             return 1
     else:
         print(json.dumps(resultado, ensure_ascii=False, indent=1, default=str))
+    if fallidos:
+        print('ERROR=' + '; '.join(fallidos)[:500])
+        print('ESTADO=ERROR')
+        return 1
     print('ESTADO=OK')
     return 0
 

@@ -148,8 +148,11 @@ def formulas(col: int, fila: int, mes: int) -> list[str]:
     ]
 
 
-def escribir_periodo(cliente: ClienteSheets, grupos: list[list[int]], periodos: list[list], anio: int, mes: int, valores: list[int], completar_formulas: bool = True) -> list[dict]:
-    """valores: los 8 datos originales en el orden de GRUPOS."""
+def escribir_periodo(cliente: ClienteSheets, grupos: list[list[int]], periodos: list[list], anio: int, mes: int, valores: list[int], completar_formulas: bool = True) -> tuple[list[dict], list[dict]]:
+    """valores: los 8 datos originales en el orden de GRUPOS.
+
+    Solo completa celdas vacías: un mes ya cargado no se corrige semana a semana
+    (las diferencias con lo publicado se informan en el log, sin escribir)."""
     fila = ubicar_fila(periodos, anio, mes)
     primera, ultima = grupos[0][0], grupos[-1][-1]
     actual = cliente.leer(f'{letra(primera)}{fila}:{letra(ultima)}{fila}', render='FORMULA')
@@ -159,13 +162,16 @@ def escribir_periodo(cliente: ClienteSheets, grupos: list[list[int]], periodos: 
         pos = col - primera
         return actual[pos] if pos < len(actual) else None
 
-    datos, cambios = [], []
+    datos, cambios, diferencias, escritos = [], [], [], []
     for columnas, valor in zip(grupos, valores):
         celda = f'{letra(columnas[0])}{fila}'
         antes = existente(columnas[0])
-        if antes != valor:
+        if es_vacio_o_cero(antes):
             datos.append({'range': f"'{HOJA}'!{celda}", 'values': [[valor]]})
             cambios.append({'celda': celda, 'antes': antes, 'despues': valor})
+            escritos.append((columnas[0], valor))
+        elif antes != valor:
+            diferencias.append({'celda': celda, 'cargado': antes, 'publicado_hoy': valor})
         if not completar_formulas:
             continue
         for col, formula in zip(columnas[1:], formulas(columnas[0], fila, mes)):
@@ -176,27 +182,22 @@ def escribir_periodo(cliente: ClienteSheets, grupos: list[list[int]], periodos: 
                 celda_f = f'{letra(col)}{fila}'
                 datos.append({'range': f"'{HOJA}'!{celda_f}", 'values': [[formula]]})
                 cambios.append({'celda': celda_f, 'antes': previo, 'despues': formula})
-    pisadas = [c for c in cambios if not (isinstance(c['despues'], str) and c['despues'].startswith('='))
-               and not es_vacio_o_cero(c['antes']) and not (isinstance(c['antes'], str) and str(c['antes']).startswith('='))]
-    if len(pisadas) >= 3 and len(pisadas) * 2 > len(valores):
-        raise RuntimeError(f'Sheet: se iban a reemplazar {len(pisadas)} de {len(valores)} datos ya cargados en la fila {fila}; '
-                           'no se escribió nada por seguridad.')
     if datos:
         cliente.escribir(datos)
     # Verificación: releer los originales escritos.
-    if cambios:
+    if escritos:
         leido = cliente.leer(f'{letra(primera)}{fila}:{letra(ultima)}{fila}', render='UNFORMATTED_VALUE')
         leido = leido[0] if leido else []
-        for columnas, valor in zip(grupos, valores):
-            pos = columnas[0] - primera
+        for col, valor in escritos:
+            pos = col - primera
             obtenido = leido[pos] if pos < len(leido) else None
             if obtenido != valor:
-                raise RuntimeError(f'Sheet: verificación fallida en {letra(columnas[0])}{fila}: se esperaba {valor}, se leyó {obtenido!r}')
-    return cambios
+                raise RuntimeError(f'Sheet: verificación fallida en {letra(col)}{fila}: se esperaba {valor}, se leyó {obtenido!r}')
+    return cambios, diferencias
 
 
 def actualizar_sheet_dnrpa(resultado: dict, nombres_series: list[str], cliente: ClienteSheets | None = None) -> dict:
-    """Escribe el último mes (con fórmulas) y corrige el mes anterior si DNRPA lo revisó."""
+    """Escribe el último mes cerrado (con fórmulas) solo en celdas vacías."""
     cliente = cliente or ClienteSheets()
     encabezados = (cliente.leer('1:1', render='FORMATTED_VALUE') or [[]])[0]
     grupos = ubicar_columnas(encabezados)
@@ -205,12 +206,15 @@ def actualizar_sheet_dnrpa(resultado: dict, nombres_series: list[str], cliente: 
     orden = [('formosa', 'patentamientos_autos'), ('formosa', 'transferencias_autos'), ('nacion', 'patentamientos_autos'), ('nacion', 'transferencias_autos'),
              ('formosa', 'patentamientos_motos'), ('formosa', 'transferencias_motos'), ('nacion', 'patentamientos_motos'), ('nacion', 'transferencias_motos')]
     series = resultado['series']
-    salida = {'estado': 'OK', 'periodo': f'{anio}-{mes:02d}', 'cambios': [], 'revision_mes_anterior': []}
-    salida['cambios'] = escribir_periodo(cliente, grupos, periodos, anio, mes, [series[s][k] for k, s in orden])
-    anteriores = [series[s].get(f'{k}_mes_anterior') for k, s in orden]
-    if mes > 1 and all(isinstance(v, int) and v > 0 for v in anteriores):
-        salida['revision_mes_anterior'] = escribir_periodo(cliente, grupos, periodos, anio, mes - 1, anteriores, completar_formulas=False)
-    salida['celdas_escritas'] = len(salida['cambios']) + len(salida['revision_mes_anterior'])
+    salida = {'estado': 'OK', 'periodo': f'{anio}-{mes:02d}', 'cambios': []}
+    # Se escribe el mes solo si sus celdas están vacías; ya no se revisa el mes anterior
+    # (DNRPA lo ajusta de a poco y eso generaba avisos semanales).
+    salida['cambios'], salida['diferencias_no_escritas'] = escribir_periodo(cliente, grupos, periodos, anio, mes, [series[s][k] for k, s in orden])
+    # Solo cuentan los datos originales (las fórmulas acompañan): 8 = mes nuevo completo.
+    salida['celdas_escritas'] = sum(1 for c in salida['cambios'] if not str(c['despues']).startswith('='))
+    if salida['diferencias_no_escritas']:
+        print(f"AVISO: DNRPA publica hoy cifras distintas a las cargadas en {salida['periodo']} "
+              f"({len(salida['diferencias_no_escritas'])} de 8); no se corrigen automáticamente.")
     # Los 8 datos originales del mes se releen del Sheet y se comparan (si no, escribir_periodo falla).
     salida['datos_esperados'] = 8
     salida['datos_verificados'] = 8
