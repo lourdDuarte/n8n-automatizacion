@@ -58,6 +58,14 @@ def main() -> int:
         print('POBLACION_ERROR', error)
     (SALIDA / 'prueba_indec.json').write_text(json.dumps(resumen, ensure_ascii=False, indent=1, default=str), encoding='utf-8')
     ok = 'error' not in resumen['ipc'] and 'error' not in resumen['poblacion']
+
+    # El ejecutor general de n8n necesita recibir un resultado JSON por stdout.
+    print(json.dumps({
+        'estado': 'OK' if ok else 'ERROR',
+        'fuente': 'indec_prueba',
+        'detalle': resumen,
+    }, ensure_ascii=False, default=str))
+
     print('ESTADO=' + ('OK' if ok else 'ERROR'))
     return 0 if ok else 1
 
