@@ -63,6 +63,7 @@ def main() -> int:
     print(json.dumps({
         'estado': 'OK' if ok else 'ERROR',
         'fuente': 'indec_prueba',
+        'periodo': resumen.get('ipc', {}).get('periodo'),
         'detalle': resumen,
     }, ensure_ascii=False, default=str))
 
