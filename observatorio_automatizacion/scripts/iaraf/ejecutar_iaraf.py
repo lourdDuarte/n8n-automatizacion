@@ -37,15 +37,20 @@ def configurar_salida() -> None:
             flujo.reconfigure(encoding="utf-8", errors="replace")
 
 
-def ejecutar_etapa(nombre: str, archivo: str) -> str:
+def ejecutar_etapa(nombre: str, archivo: str, argumentos: list[str] | None = None) -> str:
     ruta = CARPETA_SCRIPTS / archivo
     if not ruta.exists():
         raise FileNotFoundError(f"No se encontró el script requerido: {ruta}")
 
     print(f"\n[{nombre}] {archivo}")
     print("-" * 72)
+
+    comando = [sys.executable, str(ruta)]
+    if argumentos:
+        comando.extend(argumentos)
+
     resultado = subprocess.run(
-        [sys.executable, str(ruta)],
+        comando,
         cwd=RAIZ,
         capture_output=True,
         text=True,
@@ -73,8 +78,8 @@ def ejecutar_etapa(nombre: str, archivo: str) -> str:
             f"Falló la etapa {nombre} (código {resultado.returncode}).",
             registro,
         )
-    return registro
 
+    return registro
 
 def main() -> None:
     configurar_salida()
@@ -89,10 +94,24 @@ def main() -> None:
     print(f"Inicio: {inicio:%Y-%m-%d %H:%M:%S}")
 
     registros = []
+    pdf_iaraf = None
+
     try:
         for nombre, archivo in ETAPAS:
             try:
-                registros.append(ejecutar_etapa(nombre, archivo))
+                argumentos = None
+
+                if nombre == "EXTRACCION" and pdf_iaraf:
+                    argumentos = ["--pdf", pdf_iaraf]
+
+                registro = ejecutar_etapa(nombre, archivo, argumentos)
+                registros.append(registro)
+
+                if nombre == "DESCARGA":
+                    coincidencia = re.search(r"PDF_IARAF=(.+)", registro)
+                    if coincidencia:
+                        pdf_iaraf = coincidencia.group(1).strip()
+
             except ErrorEtapa as error:
                 # Si la web de IARAF no deja consultar (p. ej. verificación anti-robots), se sigue
                 # con el último PDF guardado en fuentes/iaraf (descargado antes o puesto a mano).
@@ -100,7 +119,12 @@ def main() -> None:
                     raise
                 registros.append(error.registro)
                 print("AVISO: no se pudo consultar la página de IARAF; se usa el último PDF guardado.")
-                print("NOTA_TELEGRAM=La página de IARAF tiene una verificación anti-robots y no se pudo consultar; se usó el último informe guardado. Si salió uno nuevo, descargalo a mano y guardalo en la carpeta fuentes\\iaraf.")
+                print(
+                    "NOTA_TELEGRAM=La página de IARAF tiene una verificación anti-robots "
+                    "y no se pudo consultar; se usó el último informe guardado. "
+                    "Si salió uno nuevo, descargalo a mano y guardalo en la carpeta fuentes\\iaraf."
+                )
+
     except Exception as error:
         if isinstance(error, ErrorEtapa):
             registros.append(error.registro)
@@ -123,14 +147,18 @@ def main() -> None:
         key=lambda ruta: ruta.stat().st_mtime,
         reverse=True,
     )
+
     if not reportes:
         raise SystemExit("La ejecución IARAF terminó sin generar su reporte JSON")
+
     resultado_fuente = json.loads(reportes[0].read_text(encoding="utf-8"))
+
     cantidades = [
         int(valor)
         for registro in registros
         for valor in re.findall(r"Celdas actualizadas:\s*(\d+)", registro)
     ]
+
     resultado_fuente["fuente"] = "IARAF"
     resultado_fuente["actualizacion"] = {
         "celdas_actualizadas": cantidades[-1] if cantidades else 0,
@@ -147,7 +175,5 @@ def main() -> None:
         + json.dumps(resultado_fuente, ensure_ascii=False, separators=(",", ":"))
     )
     print("=" * 72)
-
-
 if __name__ == "__main__":
     main()
