@@ -10,6 +10,7 @@ import sys
 
 import requests
 from bs4 import BeautifulSoup
+import fitz
 
 
 CARPETA_SCRIPT = Path(__file__).resolve().parent
@@ -237,6 +238,44 @@ def descargar_pdf(sesion, url):
         raise RuntimeError("El enlace encontrado no devolvió un PDF válido.")
     return contenido
 
+def validar_informe_mensual(contenido, fecha):
+    """Verifica que el PDF sea el informe mensual de transferencias automáticas."""
+    try:
+        documento = fitz.open(stream=contenido, filetype="pdf")
+        texto = " ".join(pagina.get_text("text") for pagina in documento)
+        documento.close()
+    except Exception as error:
+        raise RuntimeError(f"No se pudo leer el PDF para validarlo: {error}")
+
+    limpio = normalizar(texto)
+
+    meses = [
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+    ]
+    mes = meses[fecha.month - 1]
+    anio = fecha.year
+
+    patron_periodo = rf"transferencias automaticas de {mes} de {anio}"
+
+    if not re.search(patron_periodo, limpio):
+        raise RuntimeError(
+            f"El PDF no corresponde al informe mensual de transferencias "
+            f"automáticas de {mes} de {anio}."
+        )
+
+    if "variacion nominal" not in limpio:
+        raise RuntimeError(
+            "El PDF no contiene la variación nominal esperada del informe mensual."
+        )
+
+    if "acumulado" not in limpio:
+        raise RuntimeError(
+            "El PDF no contiene información acumulada esperada del informe mensual."
+        )
+
+    return True
+
 
 def guardar_pdf(contenido, fecha):
     CARPETA_DESTINO.mkdir(parents=True, exist_ok=True)
@@ -270,6 +309,7 @@ def main():
             print(f"URL: {url_nota}")
             url_descarga = localizar_descarga(sesion, url_nota)
             contenido = descargar_pdf(sesion, url_descarga)
+            validar_informe_mensual(contenido, fecha)
             destino = guardar_pdf(contenido, fecha)
             print(f"PDF_IARAF={destino}")
             print("RESULTADO: OK")
